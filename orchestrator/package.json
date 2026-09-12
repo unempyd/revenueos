@@ -1,0 +1,23 @@
+{
+  "name": "revenueos-orchestrator",
+  "version": "0.1.0",
+  "description": "RevenueOS orchestrator — the always-on scheduler that runs RevenueOS automations on a schedule. Vendored scheduling core from kevinbadi/kairos (MIT).",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "worker": "tsx src/worker/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "tsx": "^4.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

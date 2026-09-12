@@ -1,0 +1,54 @@
+# RevenueOS billing + panel host on Fly.io (single process, one volume).
+#
+#   fly auth login                                  # once, in a browser
+#   fly apps create revenueos-billing
+#   fly volumes create revenueos_data --size 1 --region iad --app revenueos-billing
+#   fly secrets set --app revenueos-billing \
+#       REVENUEOS_PANEL_PASSWORD=... REVENUEOS_LICENSE_SECRET=... \
+#       STRIPE_SECRET_KEY=sk_live_... STRIPE_PRICE_PRO=price_... STRIPE_PRICE_BUSINESS=price_... STRIPE_PRICE_AGENCY=price_...
+#   fly deploy --config deploy/fly.billing.toml --dockerfile Dockerfile
+#   # then create the Stripe webhook for https://revenueos-billing.fly.dev/billing/webhook and
+#   fly secrets set --app revenueos-billing STRIPE_WEBHOOK_SECRET=whsec_...
+#
+# Public routes on this host: /billing/checkout?tier=pro (302 → Stripe), /billing/webhook (Stripe → licence),
+# /billing/success (shows the buyer their licence key), /health, /site/ (the marketing site).
+# Everything else needs the panel password.
+
+app = "revenueos-billing"
+primary_region = "iad"
+
+[build]
+  dockerfile = "../Dockerfile"
+
+[env]
+  REVENUEOS_ROOT = "/app"
+  REVENUEOS_CONFIG_IN_DATA = "1"
+  REVENUEOS_LLM = "off"
+  TZ = "UTC"
+
+[processes]
+  app = "revenueos serve --host 0.0.0.0 --port 8791"
+
+[[mounts]]
+  source = "revenueos_data"
+  destination = "/app/data"
+  processes = ["app"]
+
+[http_service]
+  internal_port = 8791
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

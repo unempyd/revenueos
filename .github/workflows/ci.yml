@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install 3.12
+      - run: uv sync --extra dev --extra mcp
+      - run: uv run ruff check src tests scripts
+      - env:
+          REVENUEOS_LLM: "off"
+        run: uv run pytest -q
+      - run: python3 scripts/release_audit.py . || true   # informational on the public tree
+
+  orchestrator:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orchestrator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: orchestrator/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t revenueos:ci .
+      - run: docker run --rm -e REVENUEOS_LLM=off revenueos:ci revenueos doctor

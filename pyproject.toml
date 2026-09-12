@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "revenueos"
+version = "0.1.0"
+description = "Plug-in autonomous revenue department: connect your business, turn RevenueOS on."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+  "anthropic>=1.0",
+  "httpx>=0.28",
+  "selectolax>=0.3",
+  "structlog>=24",
+  "pydantic>=2.9",
+  "pyyaml>=6",
+  "python-dotenv>=1.0",
+  "lxml>=5",
+  "regex>=2024.0",
+  "six>=1.16",
+  "html5lib>=1.1",
+  "cssselect>=1.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+pdf = ["weasyprint>=69.0,<70.0"]
+mcp = ["mcp>=1.2,<2"]
+
+[project.scripts]
+revenueos = "revenueos.cli:main"
+revenueos-mcp = "revenueos.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/revenueos"]
+
+# The workspace template ships inside the wheel so `pip install revenueos` is a complete
+# product: `revenueos init` materialises ~/.revenueos from revenueos/bundle when no
+# workspace is found (see src/revenueos/paths.py).
+[tool.hatch.build.targets.wheel.force-include]
+"company-context" = "revenueos/bundle/company-context"
+"learning-loop" = "revenueos/bundle/learning-loop"
+"methodology" = "revenueos/bundle/methodology"
+"playbooks" = "revenueos/bundle/playbooks"
+"skills" = "revenueos/bundle/skills"
+"agents" = "revenueos/bundle/agents"
+"tools" = "revenueos/bundle/tools"
+"capabilities" = "revenueos/bundle/capabilities"
+"website" = "revenueos/bundle/website"
+"data/automations.json" = "revenueos/bundle/data/automations.json"
+"VENDOR.json" = "revenueos/bundle/VENDOR.json"
+"NOTICE.md" = "revenueos/bundle/NOTICE.md"
+"orchestrator/package.json" = "revenueos/bundle/orchestrator/package.json"
+"orchestrator/package-lock.json" = "revenueos/bundle/orchestrator/package-lock.json"
+"orchestrator/tsconfig.json" = "revenueos/bundle/orchestrator/tsconfig.json"
+"orchestrator/src" = "revenueos/bundle/orchestrator/src"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["upstream/", "research/", "logs/", "data/*.db", ".venv/", "node_modules/", "docs/screenshots/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["src/revenueos/vendor"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+ignore = ["B008", "B904", "E741", "UP007", "UP042"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["revenueos"]

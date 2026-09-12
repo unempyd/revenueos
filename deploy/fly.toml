@@ -1,0 +1,94 @@
+# Fly.io config for RevenueOS. Rename the app before first deploy:
+#   fly apps create <your-app-name>
+#   fly volumes create revenueos_data --size 1 --region <region>   # once for the panel machine
+#   fly volumes create revenueos_data --size 1 --region <region>   # once for the worker machine
+#   fly deploy --config deploy/fly.toml
+#
+# CAVEAT (read before relying on this): Fly volumes are attached to a single
+# machine and are NOT shared across process groups. `panel` and `worker`
+# below each get their OWN 1GB volume named "revenueos_data" — they do NOT
+# see the same /app/data, so the SQLite action store, run journal, and
+# data/automations.json edits made through one process will not appear in
+# the other. RevenueOS is a single-workspace app with one SQLite file
+# (CLAUDE.md, "Not yet built"); it was not designed for split storage.
+#
+# Until RevenueOS has a shared datastore, pick one:
+#   (a) deploy only `worker` here (the automations + orchestrator loop) and
+#       run the panel elsewhere (e.g. the docker-compose + Caddy setup in
+#       this directory) against the same disk;
+#   (b) fold both into one process group with an entrypoint that starts the
+#       panel and the orchestrator in the same container, sharing one volume;
+#   (c) use this file as-is only for a demo/single-user deployment where the
+#       divergence is acceptable.
+# See deploy/README.md for the fuller writeup.
+
+app = "revenueos"
+primary_region = "iad"
+
+[build]
+  dockerfile = "../Dockerfile"
+
+[env]
+  REVENUEOS_ROOT = "/app"
+  TZ = "UTC"
+
+[processes]
+  panel  = "revenueos serve --host 0.0.0.0 --port 8791"
+  worker = "revenueos orchestrator"
+
+[[mounts]]
+  source = "revenueos_data"
+  destination = "/app/data"
+  initial_size = "1gb"
+  processes = ["panel"]
+
+[[mounts]]
+  source = "revenueos_data"
+  destination = "/app/data"
+  initial_size = "1gb"
+  processes = ["worker"]
+
+# Public HTTP service for the control panel only. The worker's status API
+# (port 8790) is not exposed publicly — reach it over `fly ssh console` or
+# Fly's private networking (flycast) if you need /health or /runs from it.
+[[services]]
+  processes = ["panel"]
+  internal_port = 8791
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+
+[[vm]]
+  processes = ["panel"]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[[vm]]
+  processes = ["worker"]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

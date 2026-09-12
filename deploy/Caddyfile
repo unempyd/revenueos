@@ -1,0 +1,21 @@
+# Minimal TLS reverse proxy for the RevenueOS panel.
+#
+# Used by the `caddy` service in docker-compose.yml (--profile proxy):
+# Caddy reaches the panel over the compose network by service name — the
+# panel's own port publish (127.0.0.1:8791) stays loopback-only; this is
+# the only public ingress.
+#
+# Set REVENUEOS_DOMAIN in your .env to your real hostname before using
+# --profile proxy (it defaults to "localhost", which gets no real cert).
+# Caddy issues and renews the certificate automatically (ACME/Let's Encrypt)
+# for any real, publicly-resolvable domain — no manual cert management.
+
+{$REVENUEOS_DOMAIN} {
+	encode gzip
+
+	reverse_proxy panel:8791
+
+	# The panel itself has no rate limiting or brute-force protection on
+	# /login; keep REVENUEOS_PANEL_PASSWORD long and random rather than
+	# relying on Caddy for that.
+}

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RevenueOS Pricing — Community, Pro, Business, Agency</title>
+<meta name="description" content="RevenueOS pricing: Community is free and self-hosted forever. Pro $99/mo, Business $299/mo, Agency $999/mo unlock continuous operation, multi-brand, and white-label API access.">
+<style>
+  :root{
+    --bg:#fafaf9; --panel:#ffffff; --ink:#0f172a; --ink-soft:#44506b; --muted:#6b7280;
+    --border:#e6e7eb; --accent:#3d3ff0; --accent-ink:#ffffff; --accent-soft:#eef0ff;
+    --good:#0f7a52; --good-soft:#e8f6ef; --code-bg:#0f172a; --code-ink:#e6ecff;
+    --radius:14px; --shadow:0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.05);
+  }
+  *{box-sizing:border-box}
+  html{color-scheme:light}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding-inline:20px;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px; margin-inline:auto}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; background:var(--accent-soft); color:#28299e; padding:1px 6px; border-radius:5px; font-size:12.8px}
+
+  header.topnav{position:sticky; top:0; z-index:20; backdrop-filter:blur(6px); background:rgba(250,250,249,.86); border-bottom:1px solid var(--border)}
+  .topnav .row{display:flex; align-items:center; justify-content:space-between; padding-block:14px; gap:16px}
+  .brand{display:flex; align-items:center; gap:9px; font-weight:700; font-size:18px; color:var(--ink)}
+  .brand .dot{width:10px; height:10px; border-radius:3px; background:var(--accent); display:inline-block}
+  nav.links{display:flex; gap:22px; font-size:14.5px; color:var(--ink-soft)}
+  nav.links a{color:var(--ink-soft)}
+  nav.links a.on, nav.links a:hover{color:var(--accent)}
+
+  section{padding-block:56px}
+  h1{font-size:clamp(30px,5vw,44px); line-height:1.1; margin:0 0 14px; letter-spacing:-0.01em}
+  h2{font-size:clamp(22px,3vw,28px); margin:0 0 10px; letter-spacing:-0.01em}
+  .eyebrow{font-size:12.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent)}
+  .lede{font-size:17px; color:var(--ink-soft); max-width:680px; margin:0 auto 8px}
+  .center{text-align:center}
+
+  .cta-btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent);
+    padding:10px 18px; border-radius:10px; font-weight:600; font-size:14.5px; cursor:pointer;
+  }
+  .cta-btn:hover{background:#2f31d6; text-decoration:none}
+  .cta-btn.ghost{background:transparent; color:var(--ink); border-color:var(--border)}
+  .cta-btn.ghost:hover{background:#fff; border-color:#cfd2da}
+  .cta-btn.block{width:100%}
+  .cta-btn.small{padding:7px 12px; font-size:13px; border-radius:8px}
+
+  .price-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:36px}
+  @media (max-width:980px){ .price-grid{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:600px){ .price-grid{grid-template-columns:1fr} }
+  .price-card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:24px 20px; box-shadow:var(--shadow); display:flex; flex-direction:column}
+  .price-card.feat{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), var(--shadow)}
+  .price-card .badge{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--accent); background:var(--accent-soft); padding:3px 9px; border-radius:20px; margin-bottom:10px; align-self:flex-start}
+  .price-card .tier{font-weight:700; font-size:17px}
+  .price-card .price{font-size:32px; font-weight:800; margin:8px 0 2px}
+  .price-card .price small{font-size:13px; font-weight:600; color:var(--muted)}
+  .price-card .blurb{color:var(--muted); font-size:13.5px; margin-bottom:16px; min-height:36px}
+  .price-card .tier-note{color:var(--muted); font-size:12px; line-height:1.5; margin:-6px 0 16px}
+  .price-card ul{list-style:none; padding:0; margin:0 0 20px; flex:1}
+  .price-card li{font-size:13.8px; color:var(--ink-soft); padding:5px 0 5px 20px; position:relative}
+  .price-card li::before{content:"✓"; position:absolute; left:0; color:var(--good); font-weight:800}
+
+  .table-wrap{overflow-x:auto; margin-top:44px; border:1px solid var(--border); border-radius:var(--radius); background:var(--panel); box-shadow:var(--shadow)}
+  table{width:100%; border-collapse:collapse; min-width:720px}
+  thead th{text-align:left; font-size:13px; letter-spacing:.02em; padding:16px 18px; border-bottom:1px solid var(--border); background:#fbfbfe}
+  thead th.tiercol{text-align:center}
+  thead .tiername{font-weight:800; font-size:14.5px; display:block}
+  thead .tierprice{font-weight:600; color:var(--muted); font-size:12.5px}
+  tbody th{text-align:left; font-size:13.8px; color:var(--ink-soft); padding:12px 18px; font-weight:500; border-bottom:1px solid var(--border); white-space:nowrap}
+  tbody tr:last-child th, tbody tr:last-child td{border-bottom:none}
+  tbody td{text-align:center; padding:12px 10px; border-bottom:1px solid var(--border); font-size:15px}
+  tbody tr:nth-child(odd){background:#fcfcfd}
+  .yes{color:var(--good); font-weight:800}
+  .no{color:#c9ccd6}
+  .group-row th{background:#f4f4fb; color:var(--ink); font-weight:700; font-size:12.5px; letter-spacing:.03em; text-transform:uppercase; padding-top:14px; padding-bottom:6px}
+  .table-cta-row td{padding:16px 10px}
+
+  .billing-note{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px 24px; margin-top:44px}
+  .billing-note h3{margin:0 0 10px; font-size:16px}
+  .billing-note ol{margin:0; padding-left:20px; color:var(--ink-soft); font-size:14.5px; line-height:1.75}
+
+  footer{border-top:1px solid var(--border); padding-block:38px; margin-top:20px}
+  .foot-row{display:flex; flex-wrap:wrap; gap:18px; justify-content:space-between; align-items:flex-start; font-size:13.5px; color:var(--muted)}
+  .foot-links{display:flex; gap:18px; flex-wrap:wrap}
+  .foot-links a{color:var(--ink-soft)}
+  .todo-link{border-bottom:1px dashed var(--muted)}
+</style>
+</head>
+<body>
+
+<header class="topnav">
+  <div class="wrap row">
+    <div class="brand"><span class="dot"></span>RevenueOS</div>
+    <nav class="links">
+      <a href="index.html#loop">How it works</a>
+      <a href="index.html#evidence">Evidence</a>
+      <a href="pricing.html" class="on">Pricing</a>
+      <a href="index.html#install">Install</a>
+      <a href="index.html#inside">Built in the open</a>
+      <a href="proof.html">Proof</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="center">
+    <div class="eyebrow">Pricing</div>
+    <h1>Self-hosted software. Hosted billing.</h1>
+    <p class="lede center">You always run RevenueOS on your own infrastructure. Paid tiers unlock
+      capability through a signed licence key, issued the moment Stripe confirms your subscription.</p>
+
+    <div class="price-grid">
+      <div class="price-card">
+        <div class="badge">Free forever</div>
+        <div class="tier">Community</div>
+        <div class="price">$0</div>
+        <div class="blurb">Install it. Connect your business. Run the department by hand.</div>
+        <ul>
+          <li>Manual runs (<code>revenueos run &lt;worker&gt;</code>, <code>revenueos today</code>)</li>
+          <li>The full skill catalogue &amp; control panel</li>
+          <li>SQLite state, on your machine</li>
+        </ul>
+        <div class="tier-note">Also available as an MCP server and Claude Code plugin
+          (RevenueOS SEO Auditor, Ads Auditor, Lead Discovery, Sales Follow-up, Marketing
+          Intelligence, Revenue Monitor).</div>
+        <a class="cta-btn ghost block" href="index.html#install">Install free</a>
+      </div>
+
+      <div class="price-card feat">
+        <div class="badge">Most popular</div>
+        <div class="tier">Pro</div>
+        <div class="price">$99 <small>/ month</small></div>
+        <div class="blurb">Turn it on and leave it running.</div>
+        <ul>
+          <li>Continuous operation via the orchestrator</li>
+          <li>Advanced audits</li>
+          <li>Automated monitoring</li>
+          <li>Historical reporting</li>
+          <li>Persistent business memory</li>
+        </ul>
+        <div class="tier-note">Hosted: we run the orchestrator and panel for you; a
+          signed licence key unlocks continuous operation on self-hosted installs.</div>
+        <a class="cta-btn block" href="https://buy.stripe.com/eVq7sK3SAfVzfTd3WhfrW02">Buy Pro — $99/month</a>
+      </div>
+
+      <div class="price-card">
+        <div class="badge">Teams</div>
+        <div class="tier">Business</div>
+        <div class="price">$299 <small>/ month</small></div>
+        <div class="blurb">Run more than one brand, with more than one person.</div>
+        <ul>
+          <li>Multi-brand workspaces</li>
+          <li>Multiple users</li>
+          <li>CRM sync</li>
+          <li>Campaign fleets</li>
+          <li>Approval controls &amp; centralized analytics</li>
+        </ul>
+        <div class="tier-note">Hosted: we run the orchestrator and panel for you; a
+          signed licence key unlocks continuous operation on self-hosted installs.</div>
+        <a class="cta-btn ghost block" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+business">Request Business (hosted, by arrangement)</a>
+      </div>
+
+      <div class="price-card">
+        <div class="badge">Agencies</div>
+        <div class="tier">Agency</div>
+        <div class="price">$999 <small>/ month</small></div>
+        <div class="blurb">Run it for every client, under their own brand.</div>
+        <ul>
+          <li>Multi-client account fleets</li>
+          <li>White-label reports</li>
+          <li>Client workspaces</li>
+          <li>Full API access</li>
+        </ul>
+        <div class="tier-note">Hosted: we run the orchestrator and panel for you; a
+          signed licence key unlocks continuous operation on self-hosted installs.</div>
+        <a class="cta-btn ghost block" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+agency">Request Agency (hosted, by arrangement)</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="tight">
+    <h2>Compare every feature</h2>
+    <p class="lede">Each tier includes everything the tier to its left includes.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th class="tiercol"><span class="tiername">Community</span><span class="tierprice">$0</span></th>
+            <th class="tiercol"><span class="tiername">Pro</span><span class="tierprice">$99/mo</span></th>
+            <th class="tiercol"><span class="tiername">Business</span><span class="tierprice">$299/mo</span></th>
+            <th class="tiercol"><span class="tiername">Agency</span><span class="tierprice">$999/mo</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="group-row"><th colspan="5">Operation</th></tr>
+          <tr><th>Manual worker runs</th><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><th>Continuous operation (orchestrator)</th><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><th>Automated monitoring</th><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+
+          <tr class="group-row"><th colspan="5">Intelligence</th></tr>
+          <tr><th>Advanced audits</th><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><th>Historical reporting</th><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><th>Persistent business memory</th><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+
+          <tr class="group-row"><th colspan="5">Team &amp; scale</th></tr>
+          <tr><th>Multiple brands</th><td class="no">–</td><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><th>Multiple users</th><td class="no">–</td><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><th>CRM synchronization</th><td class="no">–</td><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><th>Approval controls &amp; centralized analytics</th><td class="no">–</td><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+
+          <tr class="group-row"><th colspan="5">Agency</th></tr>
+          <tr><th>Multi-client account fleets</th><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="yes">✓</td></tr>
+          <tr><th>White-label reports &amp; client workspaces</th><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="yes">✓</td></tr>
+          <tr><th>API access</th><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="yes">✓</td></tr>
+
+          <tr class="table-cta-row">
+            <th></th>
+            <td><a class="cta-btn ghost small" href="index.html#install">Install</a></td>
+            <td><a class="cta-btn small" href="https://buy.stripe.com/eVq7sK3SAfVzfTd3WhfrW02">Choose Pro</a></td>
+            <td><a class="cta-btn ghost small" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+business">Choose Business</a></td>
+            <td><a class="cta-btn ghost small" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+agency">Choose Agency</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="billing-note">
+      <h3>How the licence key gets to your install</h3>
+      <ol>
+        <li>Choose a tier above — you're sent to a Stripe Checkout page for that subscription.</li>
+        <li>Stripe confirms the subscription and calls RevenueOS Inc.'s webhook.</li>
+        <li>We sign a licence key for your account and email it to the address on the subscription.</li>
+        <li>Run <code>revenueos license install &lt;key&gt;</code> on your install — <code>revenueos license show</code> confirms the tier.</li>
+      </ol>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-row">
+    <div>© 2026 RevenueOS. Open-source core (MIT). Nothing sends, publishes or spends
+      without your approval.</div>
+    <div class="foot-links">
+      <a href="index.html#loop">How it works</a>
+      <a href="index.html#install">Install</a>
+      <a href="index.html#inside">Built in the open</a>
+      <a href="proof.html">Proof</a>
+      <a class="todo-link" href="https://github.com/unempyd/revenueos/blob/main/docs/security-and-approval.md" data-todo="replace with the public repo URL once published">Security &amp; approval</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

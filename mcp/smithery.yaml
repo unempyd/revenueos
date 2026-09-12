@@ -1,0 +1,48 @@
+# Smithery manifest for RevenueOS Community's MCP server.
+# https://smithery.ai — describes how to build/run `revenueos-mcp` and what it needs.
+runtime: "python"
+startCommand:
+  type: "stdio"
+  configSchema:
+    type: object
+    properties:
+      revenueosRoot:
+        type: string
+        description: >
+          Absolute path to an onboarded RevenueOS workspace (a directory containing
+          company-context/ and skills/, created with `revenueos workspace new` and
+          `revenueos init`). Defaults to the current working directory when omitted.
+      anthropicApiKey:
+        type: string
+        description: >
+          Optional Anthropic API key. Enables LLM-driven personalisation and skill
+          execution (content, SEO fix, ads recommendation deliverables); every worker
+          still runs its deterministic path without it.
+      dryRun:
+        type: boolean
+        default: true
+        description: >
+          Community default: true writes outreach sends to data/outputs/ instead of
+          over real SMTP, so the loop can be exercised with zero risk.
+  commandFunction: |-
+    (config) => ({
+      command: "uv",
+      args: ["run", "revenueos-mcp"],
+      env: {
+        ...(config.revenueosRoot ? { REVENUEOS_ROOT: config.revenueosRoot } : {}),
+        ...(config.anthropicApiKey ? { ANTHROPIC_API_KEY: config.anthropicApiKey } : {}),
+        REVENUEOS_DRY_RUN: config.dryRun === false ? "0" : "1"
+      }
+    })
+build:
+  dockerfile: "../Dockerfile"
+  dockerBuildPath: ".."
+metadata:
+  name: "revenueos"
+  displayName: "RevenueOS"
+  description: >
+    Connect a business and run its RevenueOS Community capabilities — SEO Auditor, Ads
+    Auditor, Lead Discovery, Sales Follow-up, Marketing Intelligence, Revenue Monitor.
+    Nothing sends, publishes or spends without an explicit approve + execute.
+  license: "MIT"
+  homepage: "https://unempyd.github.io/revenueos/"

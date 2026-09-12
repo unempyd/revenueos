@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.unempyd/revenueos",
+  "description": "Self-hosted revenue department: find opportunities, execute approved work, measure results.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/unempyd/revenueos",
+    "source": "github"
+  },
+  "websiteUrl": "https://unempyd.github.io/revenueos/",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "revenueos",
+      "version": "0.1.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "revenueos-mcp",
+          "valueHint": "revenueos-mcp"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "REVENUEOS_ROOT",
+          "description": "Path to the onboarded RevenueOS workspace (defaults to ~/.revenueos).",
+          "isRequired": false
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "description": "Optional: enables the LLM paths (relevance gating, skill execution).",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

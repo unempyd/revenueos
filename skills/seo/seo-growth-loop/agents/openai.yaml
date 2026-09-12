@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recursive SEO Growth Loop"
+  short_description: "Run a closed-loop SEO growth workflow"
+  default_prompt: "Use $seo-growth-loop to choose one bounded SEO improvement or report-only opportunity, verify it, log it, and stop."

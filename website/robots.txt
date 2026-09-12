@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://unempyd.github.io/revenueos/sitemap.xml

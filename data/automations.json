@@ -1,0 +1,46 @@
+{
+  "automations": [
+    {
+      "name": "discover",
+      "schedule": "0 7 * * *",
+      "skill": "discover",
+      "enabled": true,
+      "description": "Daily lead and opportunity discovery sweep at 07:00."
+    },
+    {
+      "name": "seo",
+      "schedule": "0 6 * * 1",
+      "skill": "seo",
+      "enabled": true,
+      "description": "Weekly SEO audit and content-gap report, Monday 06:00."
+    },
+    {
+      "name": "ads-audit",
+      "schedule": "30 6 * * *",
+      "skill": "ads-audit",
+      "enabled": true,
+      "description": "Daily paid-ads spend and performance audit at 06:30."
+    },
+    {
+      "name": "outreach",
+      "schedule": "0 8 * * 1-5",
+      "skill": "outreach",
+      "enabled": true,
+      "description": "Weekday outbound outreach batch at 08:00."
+    },
+    {
+      "name": "content",
+      "schedule": "0 9 * * 2,4",
+      "skill": "content",
+      "enabled": true,
+      "description": "Content drafting run, Tuesday and Thursday 09:00."
+    },
+    {
+      "name": "monitor",
+      "schedule": "0 */6 * * *",
+      "skill": "monitor",
+      "enabled": true,
+      "description": "Health and pipeline monitor, every 6 hours."
+    }
+  ]
+}

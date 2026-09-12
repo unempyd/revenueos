@@ -1,0 +1,48 @@
+# Build context for the RevenueOS image. The Dockerfile COPYs specific
+# paths rather than `COPY . .`, but trimming the context still speeds up
+# every build and keeps secrets from ever reaching the daemon.
+
+.git
+.DS_Store
+**/.DS_Store
+.gitignore
+
+# Reproducible from upstream/MANIFEST.tsv via scripts/fetch-upstream.sh;
+# scripts/vendor.py has already copied what the product needs into
+# src/revenueos/vendor, skills/, agents/, tools/, methodology/, playbooks/.
+upstream/
+
+# Rebuilt inside the image by `uv sync` / `npm ci` — never trust a host copy.
+node_modules/
+**/node_modules/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Workspace state (per install) — regenerated at runtime, must not be baked
+# into the image. data/automations.json is the one exception (the Dockerfile
+# COPYs it explicitly) and is not matched by any pattern below.
+data/*.db
+data/*.db-*
+data/*.sqlite*
+data/exports/
+data/outputs/
+data/reports/
+data/content.jsonl
+logs/
+
+# Not needed at runtime.
+tests/
+research/
+
+# Secrets — never send these to the build context or a layer.
+.env
+.env.*
+!.env.example
+revenueos.yaml
