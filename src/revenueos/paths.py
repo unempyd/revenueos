@@ -34,6 +34,11 @@ def materialise(dest: Path, source: Path = BUNDLE) -> Path:
     return dest
 
 
+def is_workspace(path: Path) -> bool:
+    """Public form of the marker test used by find_root (an explicit --root must pass it)."""
+    return _is_workspace(path.expanduser().resolve())
+
+
 def find_root(start: Path | None = None) -> Path:
     """Resolve the workspace: $REVENUEOS_ROOT, else walk up from cwd, else the source checkout
     (editable installs / tests), else ~/.revenueos created from the bundled template."""

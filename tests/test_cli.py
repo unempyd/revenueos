@@ -63,3 +63,14 @@ def test_correct_appends_to_learning_loop(workspace, capsys):
     assert main(["--root", str(workspace.root), "correct", "no exclamation marks", "--context", "draft shouted",
                  "--correction", "never use exclamation marks", "--apply-when", "external copy"]) == 0
     assert "no exclamation marks" in workspace.corrections.read_text()
+
+
+def test_explicit_root_must_be_a_workspace(tmp_path, capsys):
+    """`--root <dir>` that is not a workspace errors instead of silently using ~/.revenueos."""
+    import pytest
+
+    bare = tmp_path / "not-a-workspace"
+    bare.mkdir()
+    with pytest.raises(SystemExit) as e:
+        main(["--root", str(bare), "today"])
+    assert "not a RevenueOS workspace" in str(e.value) and "workspace new" in str(e.value)

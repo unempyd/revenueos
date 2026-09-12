@@ -64,6 +64,19 @@ def _domain(url: str) -> str:
     return host.removeprefix("www.")
 
 
+NON_HTML_SUFFIXES = (".xml", ".json", ".txt", ".pdf", ".rss", ".atom", ".csv", ".gz")
+
+
+def is_html_page(url: str) -> bool:
+    """A crawled URL that is not a real HTML page (sitemaps, feeds, robots.txt) must never
+    be scored for title/description/H1/thin-content: those fields are absent by design and
+    counting them manufactures defects that do not exist."""
+    path = urlparse(url or "").path.lower()
+    if path.endswith(NON_HTML_SUFFIXES):
+        return False
+    return "sitemap" not in path and not path.endswith("/robots.txt")
+
+
 def crawl_findings(site: str, max_pages: int = 12) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     raw = asyncio.run(_crawl(site, max_pages=max_pages))
     data = json.loads(raw)
@@ -73,6 +86,8 @@ def crawl_findings(site: str, max_pages: int = 12) -> tuple[list[dict[str, Any]]
     titles: dict[str, list[str]] = {}
     for page in data.get("pages", []):
         url, meta, excerpt = page.get("url"), page.get("meta") or {}, page.get("excerpt") or ""
+        if not is_html_page(url):
+            continue
         title = (meta.get("title") or "").strip()
         desc = (meta.get("description") or "").strip()
         before = {"title": title, "description": desc, "body_chars": len(excerpt)}

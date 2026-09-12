@@ -21,7 +21,7 @@ from pathlib import Path
 from . import __version__
 from .context import QUESTIONS, BusinessContext
 from .llm import LLM, maybe_llm
-from .paths import Workspace
+from .paths import Workspace, is_workspace
 from .registry import build_registry, load_registry, search_skills
 from .store import Store
 from .today import build_brief
@@ -29,7 +29,12 @@ from .workers import all_workers, execute_action, run_worker
 
 
 def _boot(args: argparse.Namespace) -> tuple[Workspace, Store, BusinessContext]:
-    ws = Workspace.locate(Path(args.root) if getattr(args, "root", None) else None)
+    root = getattr(args, "root", None)
+    if root and not is_workspace(Path(root)):
+        # an explicit --root must be a workspace; silently falling back to ~/.revenueos would
+        # write the customer's answers and leads somewhere they did not point at
+        raise SystemExit(f"{root} is not a RevenueOS workspace (no company-context/). Create one: revenueos workspace new {root}")
+    ws = Workspace.locate(Path(root) if root else None)
     return ws, Store(ws.db), BusinessContext.load(ws)
 
 
