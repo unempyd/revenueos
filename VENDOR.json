@@ -1,0 +1,547 @@
+{
+  "generated_by": "scripts/vendor.py",
+  "sources": {
+    "AgriciDaniel__claude-ads": {
+      "repo": "AgriciDaniel/claude-ads",
+      "commit": "ac21644933910419529bcf81efb95a9ca71edf81",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "claude_ads_core",
+          "dst": "src/revenueos/vendor/claude_ads_core",
+          "mode": "tree"
+        },
+        {
+          "src": "control-plane/manifests",
+          "dst": "src/revenueos/vendor/claude_ads_data/control-plane/manifests",
+          "mode": "tree"
+        },
+        {
+          "src": "skills/*",
+          "dst": "skills/ads",
+          "mode": "glob"
+        },
+        {
+          "src": "ads",
+          "dst": "skills/ads/ads",
+          "mode": "tree"
+        },
+        {
+          "src": "agents",
+          "dst": "agents/ads",
+          "mode": "tree"
+        }
+      ]
+    },
+    "aruntemme__pulse-cmo": {
+      "repo": "aruntemme/pulse-cmo",
+      "commit": "04626391e581f30dd3cfd89b5dab772292ec1d0c",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "src/pulse/tools/registry.py",
+          "dst": "src/revenueos/vendor/pulse/registry.py",
+          "mode": "file"
+        },
+        {
+          "src": "src/pulse/tools/crawl.py",
+          "dst": "src/revenueos/vendor/pulse/crawl.py",
+          "mode": "file"
+        },
+        {
+          "src": "src/pulse/tools/discovery.py",
+          "dst": "src/revenueos/vendor/pulse/discovery.py",
+          "mode": "file"
+        },
+        {
+          "src": "src/pulse/relevance.py",
+          "dst": "src/revenueos/vendor/pulse/relevance.py",
+          "mode": "file"
+        },
+        {
+          "src": "src/pulse/text.py",
+          "dst": "src/revenueos/vendor/pulse/text.py",
+          "mode": "file"
+        },
+        {
+          "src": "src/pulse/product_brain.py",
+          "dst": "src/revenueos/vendor/pulse/product_brain.py",
+          "mode": "file"
+        }
+      ]
+    },
+    "Meshpilot-AGI__ai-sales-agent": {
+      "repo": "Meshpilot-AGI/ai-sales-agent",
+      "commit": "e87c79471cdc09765e070fe634c04f50997930b7",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "src/sales_agent/db/models.py",
+          "dst": "src/revenueos/vendor/sales_agent/models.py",
+          "mode": "file"
+        },
+        {
+          "src": "src/sales_agent/agent/recipes_stub.py",
+          "dst": "src/revenueos/vendor/sales_agent/recipes.py",
+          "mode": "file"
+        },
+        {
+          "src": "src/sales_agent/mail/render.py",
+          "dst": "src/revenueos/vendor/sales_agent/render.py",
+          "mode": "file"
+        },
+        {
+          "src": "src/sales_agent/mail/templates",
+          "dst": "src/revenueos/vendor/sales_agent/templates",
+          "mode": "tree"
+        },
+        {
+          "src": "migrations/0001_init_schema.sql",
+          "dst": "src/revenueos/vendor/sales_agent/postgres_schema.sql",
+          "mode": "file"
+        }
+      ]
+    },
+    "markster-public__markster-os": {
+      "repo": "markster-public/markster-os",
+      "commit": "b1da500547153119661f83ad1817dbacc84ac0a4",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "tools/validate_markster_os.py",
+          "dst": "src/revenueos/vendor/markster/validate_markster_os.py",
+          "mode": "file"
+        },
+        {
+          "src": "company-context",
+          "dst": "company-context",
+          "mode": "tree"
+        },
+        {
+          "src": "learning-loop",
+          "dst": "learning-loop",
+          "mode": "tree"
+        },
+        {
+          "src": "methodology",
+          "dst": "methodology",
+          "mode": "tree"
+        },
+        {
+          "src": "playbooks",
+          "dst": "playbooks",
+          "mode": "tree"
+        },
+        {
+          "src": "skills/*",
+          "dst": "skills/gtm",
+          "mode": "glob"
+        }
+      ]
+    },
+    "marketingskills__seo": {
+      "repo": "marketingskills/seo",
+      "commit": "b25b48c2d3001fd387b37981d2ee54a07d3f6fce",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "skills/seo-growth-loop/scripts/probe_project.py",
+          "dst": "src/revenueos/vendor/seo/probe_project.py",
+          "mode": "file"
+        },
+        {
+          "src": "skills/authority-mark-keyword-difficulty/scripts/authority_mark.py",
+          "dst": "src/revenueos/vendor/seo/authority_mark.py",
+          "mode": "file"
+        },
+        {
+          "src": "skills/*",
+          "dst": "skills/seo",
+          "mode": "glob"
+        }
+      ]
+    },
+    "kevinbadi__kairos": {
+      "repo": "kevinbadi/kairos",
+      "commit": "d1fd28850236485041f3e0cef6a2ab34763b4a1f",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "src/worker/schedule.ts",
+          "dst": "orchestrator/src/worker/schedule.ts",
+          "mode": "file"
+        },
+        {
+          "src": "src/worker/automations.ts",
+          "dst": "orchestrator/src/worker/automations.ts",
+          "mode": "file"
+        },
+        {
+          "src": "src/worker/server.ts",
+          "dst": "orchestrator/src/worker/server.ts",
+          "mode": "file"
+        },
+        {
+          "src": "src/storage/store.ts",
+          "dst": "orchestrator/src/storage/store.ts",
+          "mode": "file"
+        },
+        {
+          "src": "src/storage/jsonlStore.ts",
+          "dst": "orchestrator/src/storage/jsonlStore.ts",
+          "mode": "file"
+        },
+        {
+          "src": "src/util/activityLog.ts",
+          "dst": "orchestrator/src/util/activityLog.ts",
+          "mode": "file"
+        },
+        {
+          "src": "tests/storage.test.ts",
+          "dst": "orchestrator/tests/storage.test.ts",
+          "mode": "file"
+        },
+        {
+          "src": "tests/activityMerge.test.ts",
+          "dst": "orchestrator/tests/activityMerge.test.ts",
+          "mode": "file"
+        }
+      ]
+    },
+    "guerrilla2799__ai-cmo-operator": {
+      "repo": "guerrilla2799/ai-cmo-operator",
+      "commit": "6ce2d4e68e3fea7c534c38b87570f7b8b9276935",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "CORRECTIONS-template.md",
+          "dst": "learning-loop/CORRECTIONS.md",
+          "mode": "file"
+        },
+        {
+          "src": "skills/*.md",
+          "dst": "skills/cmo",
+          "mode": "mdglob"
+        }
+      ]
+    },
+    "iamwaqargulzar__Marketing-Agent-OS": {
+      "repo": "iamwaqargulzar/Marketing-Agent-OS",
+      "commit": "adb39acf84ce8920bc6880218eba38f6648aa599",
+      "license": "Apache",
+      "entries": [
+        {
+          "src": "skills/*",
+          "dst": "skills/core",
+          "mode": "glob"
+        },
+        {
+          "src": "catalog.json",
+          "dst": "skills/core/catalog.json",
+          "mode": "file"
+        }
+      ]
+    },
+    "OpenClaudia__openclaudia-skills": {
+      "repo": "OpenClaudia/openclaudia-skills",
+      "commit": "10f3fd8090315dfe885e8266618fc541348a749e",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "skills/*",
+          "dst": "skills/creative",
+          "mode": "glob"
+        }
+      ]
+    },
+    "scayver__marketing-skills": {
+      "repo": "scayver/marketing-skills",
+      "commit": "18243d7675fa83638f20c660e31311c1bf03294d",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "skills/*",
+          "dst": "skills/operations",
+          "mode": "glob"
+        },
+        {
+          "src": "docs/MARKETING_OS_MANIFEST.json",
+          "dst": "skills/operations/MANIFEST.json",
+          "mode": "file"
+        },
+        {
+          "src": "tools/clis",
+          "dst": "tools/clis",
+          "mode": "tree"
+        },
+        {
+          "src": "tools/integrations",
+          "dst": "tools/integrations",
+          "mode": "tree"
+        }
+      ]
+    },
+    "coreyhaines31__marketingskills": {
+      "repo": "coreyhaines31/marketingskills",
+      "commit": "5b2c0007766c6a1cf1d53fd8fc73e979e0821022",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "skills/*",
+          "dst": "skills/growth",
+          "mode": "glob"
+        },
+        {
+          "src": "tools/clis",
+          "dst": "tools/clis",
+          "mode": "overlay"
+        },
+        {
+          "src": "tools/integrations",
+          "dst": "tools/integrations",
+          "mode": "overlay"
+        },
+        {
+          "src": "tools/REGISTRY.md",
+          "dst": "tools/REGISTRY.md",
+          "mode": "file"
+        }
+      ]
+    },
+    "kostja94__marketing-skills": {
+      "repo": "kostja94/marketing-skills",
+      "commit": "70987bad4ebe9dce1f74858c1c64f3f8810f18e4",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "skills",
+          "dst": "skills/playbooks",
+          "mode": "tree"
+        }
+      ]
+    },
+    "ericosiu__ai-marketing-skills": {
+      "repo": "ericosiu/ai-marketing-skills",
+      "commit": "09694f033dead134cccc4a670d6a6dad84bc118b",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "*/SKILL.md",
+          "dst": "skills/pipelines",
+          "mode": "skilldirs"
+        }
+      ]
+    },
+    "shalintripathi__saas-marketing-agents": {
+      "repo": "shalintripathi/saas-marketing-agents",
+      "commit": "95440b5757aff77273561f4a8763c25452f455f1",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "plugins/saas-marketing/skills/*",
+          "dst": "skills/agency",
+          "mode": "glob"
+        },
+        {
+          "src": "abm,analytics,client-ops,comms,content,design,developer-marketing,email,events,growth,paid-media,partnerships,product-marketing,project-management,sales,seo,social",
+          "dst": "agents/agency",
+          "mode": "dirs"
+        }
+      ]
+    },
+    "growthack88__growth-marketing-os": {
+      "repo": "growthack88/growth-marketing-os",
+      "commit": "db41a8e2e9fae2a0e3d4f16e4bc2af4a4d34b79c",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "skills/*",
+          "dst": "skills/growth-lab",
+          "mode": "glob"
+        }
+      ]
+    },
+    "claude-office-skills__skills": {
+      "repo": "claude-office-skills/skills",
+      "commit": "9c4c7d5cd2813a8936bf2c9fdb174ea883b85a11",
+      "license": "MIT",
+      "entries": [
+        {
+          "src": "lead-research",
+          "dst": "skills/office/lead-research",
+          "mode": "tree"
+        },
+        {
+          "src": "lead-qualification",
+          "dst": "skills/office/lead-qualification",
+          "mode": "tree"
+        },
+        {
+          "src": "content-writer",
+          "dst": "skills/office/content-writer",
+          "mode": "tree"
+        },
+        {
+          "src": "brand-guidelines",
+          "dst": "skills/office/brand-guidelines",
+          "mode": "tree"
+        },
+        {
+          "src": "ads-copywriter",
+          "dst": "skills/office/ads-copywriter",
+          "mode": "tree"
+        },
+        {
+          "src": "competitive-analysis",
+          "dst": "skills/office/competitive-analysis",
+          "mode": "tree"
+        },
+        {
+          "src": "company-research",
+          "dst": "skills/office/company-research",
+          "mode": "tree"
+        }
+      ]
+    },
+    "mailgun__talon": {
+      "repo": "mailgun/talon",
+      "commit": "ee497a79c648fb040e6a8c83114d796a057aee8e",
+      "license": "Apache",
+      "entries": [
+        {
+          "src": "talon/quotations.py",
+          "dst": "src/revenueos/vendor/talon/quotations.py",
+          "mode": "file"
+        },
+        {
+          "src": "talon/html_quotations.py",
+          "dst": "src/revenueos/vendor/talon/html_quotations.py",
+          "mode": "file"
+        },
+        {
+          "src": "talon/utils.py",
+          "dst": "src/revenueos/vendor/talon/utils.py",
+          "mode": "file"
+        },
+        {
+          "src": "talon/constants.py",
+          "dst": "src/revenueos/vendor/talon/constants.py",
+          "mode": "file"
+        }
+      ]
+    }
+  },
+  "patches": [
+    {
+      "file": "src/revenueos/vendor/pulse/relevance.py",
+      "pattern": "from \\.llm import LLM, Message",
+      "replacement": "from revenueos.llm import LLM, Message",
+      "why": "RevenueOS supplies the LLM client (Anthropic SDK) instead of pulse's OpenAI-compatible one"
+    },
+    {
+      "file": "orchestrator/src/worker/automations.ts",
+      "pattern": "join\\(workspaceRoot, 'kairos', 'automations\\.json'\\)",
+      "replacement": "join(workspaceRoot, 'data', 'automations.json')",
+      "why": "RevenueOS workspace layout: data/automations.json"
+    },
+    {
+      "file": "orchestrator/src/storage/jsonlStore.ts",
+      "pattern": "join\\(workspaceRoot, 'kairos', 'content', 'items\\.jsonl'\\)",
+      "replacement": "join(workspaceRoot, 'data', 'content.jsonl')",
+      "why": "RevenueOS workspace layout"
+    },
+    {
+      "file": "src/revenueos/vendor/pulse/discovery.py",
+      "pattern": "from \\.\\.relevance import",
+      "replacement": "from .relevance import",
+      "why": "flattened package: relevance.py sits beside discovery.py"
+    },
+    {
+      "file": "src/revenueos/vendor/sales_agent/render.py",
+      "pattern": "from sales_agent\\.db\\.models import",
+      "replacement": "from .models import",
+      "why": "package relocation"
+    },
+    {
+      "file": "src/revenueos/vendor/sales_agent/render.py",
+      "pattern": "SENDER_NAME = \"[^\"]+\"",
+      "replacement": "class _Sender:\n    def __str__(self) -> str:\n        return settings.casl_sender_name\n    __format__ = lambda self, spec: settings.casl_sender_name  # noqa: E731\n\n\nSENDER_NAME = _Sender()",
+      "why": "upstream hardcoded the original author's name; RevenueOS reads the sender from revenueos.yaml"
+    },
+    {
+      "file": "src/revenueos/vendor/sales_agent/render.py",
+      "pattern": "DEMO_URL = \"https://example-brand\\.com\"\\nLANDING_URL = \"https://landing\\.example\\.com\"",
+      "replacement": "DEMO_URL = \"\"\nLANDING_URL = \"\"",
+      "why": "upstream demo/landing placeholders removed; booking_url comes from revenueos.yaml"
+    },
+    {
+      "file": "src/revenueos/vendor/sales_agent/render.py",
+      "pattern": "from sales_agent\\.config import settings\\n",
+      "replacement": "from .settings import settings\n",
+      "why": "settings object provided by revenueos.vendor.sales_agent.settings"
+    },
+    {
+      "file": "src/revenueos/vendor/pulse/product_brain.py",
+      "pattern": "from \\.llm import LLM, Message\\nfrom \\.store import ActionStore\\nfrom \\.strategy_core import gather_evidence, render_evidence\\n",
+      "replacement": "from revenueos.llm import LLM, Message  # RevenueOS: store/strategy_core imports removed; only brain_context_block is used\nActionStore = gather_evidence = render_evidence = None  # noqa: N816\n",
+      "why": "RevenueOS uses brain_context_block only; pulse's project store and strategy engine are not vendored"
+    },
+    {
+      "file": "src/revenueos/vendor/talon/quotations.py",
+      "pattern": "from talon import html_quotations",
+      "replacement": "from . import html_quotations",
+      "why": "package relocation"
+    },
+    {
+      "file": "src/revenueos/vendor/talon/quotations.py",
+      "pattern": "from talon\\.utils import",
+      "replacement": "from .utils import",
+      "why": "package relocation"
+    },
+    {
+      "file": "src/revenueos/vendor/talon/html_quotations.py",
+      "pattern": "from talon\\.utils import",
+      "replacement": "from .utils import",
+      "why": "package relocation"
+    },
+    {
+      "file": "src/revenueos/vendor/talon/utils.py",
+      "pattern": "from talon\\.constants import",
+      "replacement": "from .constants import",
+      "why": "package relocation"
+    }
+  ],
+  "telemetry_stripped_from": [
+    "skills/pipelines/short-form-pipeline/SKILL.md",
+    "skills/pipelines/shortform-production/SKILL.md",
+    "skills/pipelines/growth-engine/SKILL.md",
+    "skills/pipelines/team-ops/SKILL.md",
+    "skills/pipelines/packaging-youtube-thumbnails/SKILL.md",
+    "skills/pipelines/conversion-ops/SKILL.md",
+    "skills/pipelines/podcast-ops/SKILL.md",
+    "skills/pipelines/net-new-video-editor/SKILL.md",
+    "skills/pipelines/content-ops/SKILL.md",
+    "skills/pipelines/content-eval/SKILL.md",
+    "skills/pipelines/seo-ops/SKILL.md",
+    "skills/pipelines/clone-site/SKILL.md",
+    "skills/pipelines/video-content-engine/SKILL.md",
+    "skills/pipelines/show-and-tell-video-slate/SKILL.md",
+    "skills/pipelines/lead-dossier/SKILL.md",
+    "skills/pipelines/outbound-engine/SKILL.md",
+    "skills/pipelines/video-clip-pipeline/SKILL.md",
+    "skills/pipelines/revenue-intelligence/SKILL.md",
+    "skills/pipelines/video-caption-generator/SKILL.md",
+    "skills/pipelines/sales-pipeline/SKILL.md",
+    "skills/pipelines/sales-playbook/SKILL.md",
+    "skills/pipelines/finance-ops/SKILL.md"
+  ],
+  "excluded": {
+    "adkit__ads-skills": "proprietary AdKit licence forbids bundling into other skill libraries",
+    "eracle__OpenOutreach": "GPL-3.0; used only across a process boundary (services/openoutreach)",
+    "arkitekt-ai__OpenCRM": "no LICENSE file (README claims MIT); reference only",
+    "kevinbadi__ai-os-skills": "no LICENSE file; reference only",
+    "erron-ai__marketing-skills": "no LICENSE file; the MIT superset of its CLIs is vendored from coreyhaines31/scayver",
+    "astDeniss__business-skills": "no LICENSE file; reference only",
+    "kevinbadi__kairos templates/": "CreatorOS social-media playbooks; not applicable"
+  }
+}

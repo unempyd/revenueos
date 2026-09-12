@@ -1,0 +1,38 @@
+# upstream clones are reproducible from upstream/MANIFEST.tsv via scripts/fetch-upstream.sh
+upstream/*/
+.DS_Store
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+# workspace state (per install)
+data/*.db
+data/*.db-*
+data/*.sqlite*
+data/exports/
+data/outputs/
+data/reports/
+data/content.jsonl
+logs/
+services/openoutreach/data/
+revenueos.yaml
+
+# added by scripts/build_public.py to keep the export's git history clean
+upstream/*/
+data/*.db
+data/*.db-*
+data/*.sqlite*
+data/exports/
+data/outputs/
+data/reports/
+data/content.jsonl
+logs/
+revenueos.yaml

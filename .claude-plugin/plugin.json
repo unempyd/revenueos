@@ -1,0 +1,31 @@
+{
+  "name": "revenueos",
+  "version": "0.1.0",
+  "description": "RevenueOS Community: connect a business, run its capability workers (SEO Auditor, Ads Auditor, Lead Discovery, Sales Follow-up, Marketing Intelligence, Revenue Monitor) and approve what they find. Nothing sends, publishes or spends without a human decision.",
+  "author": {
+    "name": "RevenueOS"
+  },
+  "homepage": "https://revenueos.com",
+  "repository": "https://github.com/unempyd/revenueos",
+  "license": "MIT",
+  "keywords": [
+    "agent-skills",
+    "revenue-operations",
+    "seo-audit",
+    "ads-audit",
+    "lead-discovery",
+    "sales-outreach",
+    "marketing-intelligence",
+    "revenue-monitoring",
+    "claude-code-skill",
+    "mcp"
+  ],
+  "skills": ["./capabilities"],
+  "mcpServers": {
+    "revenueos-mcp": {
+      "command": "uv",
+      "args": ["run", "revenueos-mcp"],
+      "cwd": "${CLAUDE_PLUGIN_ROOT}"
+    }
+  }
+}

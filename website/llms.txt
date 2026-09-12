@@ -1,0 +1,14 @@
+# RevenueOS
+
+> Connect your business. RevenueOS finds opportunities, executes approved revenue work, and measures what happened. Self-hosted, open source (MIT), Python + Node.
+
+RevenueOS is a self-hosted revenue department for one business: workers analyse the website, ad exports, lead lists, mailbox and Hacker News; every action waits for approval; approved actions are executed (email send, or a skill run by Claude); outcomes are measured and shown next to the action. Community is free; Pro ($99/month), Business ($299) and Agency ($999) add continuous operation, hosting and multi-brand features.
+
+## Links
+- Product site: https://unempyd.github.io/revenueos/
+- Source and install: https://github.com/unempyd/revenueos
+- Install: pip install "git+https://github.com/unempyd/revenueos"
+- Runtime proof (real run): https://unempyd.github.io/revenueos/proof.html
+- Pricing: https://unempyd.github.io/revenueos/pricing.html
+- MCP server + Claude Code plugin: https://github.com/unempyd/revenueos/tree/main/mcp
+- Security and approval model: https://github.com/unempyd/revenueos/blob/main/docs/security-and-approval.md

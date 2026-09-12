@@ -1,0 +1,137 @@
+# CLAUDE.md (public)
+
+Guidance for working in this codebase — commands, architecture, invariants, and testing
+conventions. This is the contributor-facing version; see `CONTRIBUTING.md` for how to set
+up a development environment and what a change needs before it merges.
+
+## Commands
+
+```bash
+scripts/fetch-upstream.sh                 # fetch every upstream at the commit pinned in upstream/MANIFEST.tsv (upstream/*/ is gitignored)
+python3 scripts/vendor.py                 # re-assemble vendored code + skills from upstream/ (idempotent; the only way to change vendored files)
+uv sync --extra dev                       # Python 3.12+ env with the `revenueos` CLI
+uv run pytest -q                          # Python suite; one test: uv run pytest tests/test_measure.py::test_seo_fix_is_measured_by_recrawl
+uv run ruff check src tests               # lint (vendored code excluded)
+cd orchestrator && npm install && npm test && npm run typecheck   # vitest + tsc; one file: npx vitest run tests/worker.test.ts
+uv run revenueos workspace new <dir>      # a fresh customer workspace sharing this install's catalogue; then --root <dir> or REVENUEOS_ROOT
+uv run revenueos init --answers a.json    # onboarding (keys: QUESTIONS in src/revenueos/context.py); interactive without --answers
+uv run revenueos run <worker|all> [--json] [--no-llm]   # workers: discover outreach inbox seo ads-audit content monitor measure
+uv run revenueos today | results | approve <id> | execute <id> | ignore <id> | doctor | skills search <q> | tools
+uv run revenueos serve [--host 0.0.0.0 --port 8791]     # control panel; non-loopback needs REVENUEOS_PANEL_PASSWORD
+uv run revenueos orchestrator [--once <automation>]      # the always-on worker loop over data/automations.json; continuous mode needs a Pro licence
+uv run revenueos license show|install <key>|issue ...    # licence (vendor issues with REVENUEOS_LICENSE_SECRET)
+uv run revenueos billing checkout --tier pro --success-url .. --cancel-url ..   # Stripe Checkout URL (STRIPE_SECRET_KEY, STRIPE_PRICE_PRO)
+docker compose up orchestrator panel; docker compose --profile outreach up      # see deploy/README.md for production
+deploy/smoke.sh https://host                             # /health + /api/today
+```
+
+Environment: LLM provider auto-detected (`REVENUEOS_LLM=anthropic|claude-cli|off`):
+`ANTHROPIC_API_KEY` / `ant auth login` → the Anthropic SDK (`REVENUEOS_MODEL`,
+`REVENUEOS_EFFORT`); otherwise a signed-in Claude Code CLI (`claude -p`).
+`SMTP_PASSWORD`/`IMAP_PASSWORD` + `smtp.host`/`imap.host` in `revenueos.yaml` for real
+mail; `REVENUEOS_DRY_RUN=1` writes emails to `data/outputs/`. `REVENUEOS_PANEL_PASSWORD`,
+`REVENUEOS_WORKER_TOKEN`, `REVENUEOS_LICENSE_SECRET`, `STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_<TIER>`.
+
+## The loop (what the product is)
+
+connect (`init` / panel `/onboard`) → analyse (workers) → opportunity (`actions` rows) →
+present (`today`, panel `/`) → approve → execute (`execute_action`: `send_email` or
+`run_skill`) → measure (`measure` worker → `outcomes` rows) → record and display
+(`results`, panel `/results`, `/api/today`).
+
+Proven on a real business in `docs/PROOF.md` (content opportunity → the matching skill
+runs → deliverable measured). The outreach variant (send → reply via IMAP → booked →
+pipeline $) and the ads variant (waste → next export delta) are covered by tests against
+real state changes and need the customer's mailbox / exports to run live.
+
+## Architecture
+
+RevenueOS is an assembly, not a fresh codebase. A large share of its capability is
+vendored from pinned upstream sources — `VENDOR.json` records the repository, commit,
+licence, and every copied path for each; `NOTICE.md` is the full, human-readable account
+of what came from where and why some sources were deliberately excluded. New code is the
+glue: business context, registry, the orchestration adapter, the approval surface,
+measurement, billing, packaging.
+
+**Flow.** `revenueos init` (or the panel's `/onboard` form) writes the questionnaire into
+`company-context/` (a 12-file canon with fixed headings; `context.py:replace_section` edits
+bodies without breaking the vendored validator) and `revenueos.yaml` (website, competitors,
+channels, sender, SMTP/IMAP, `ads.data_lifecycle`). Workers (`src/revenueos/workers/`) read
+`BusinessContext`, call vendored code, and write **actions** into SQLite (`store.py`;
+schema lineage in its docstring; `outcomes` is RevenueOS's own addition). `today.py` renders
+the brief and RESULTS; `cli.py`/`panel.py`/`mcp_server.py` are the approval surfaces.
+`execute_action` dispatches on `context["executor"]`: `send_email` (outreach) or
+`run_skill` (content/seo/ads — runs a SKILL.md as the system prompt with
+`ctx.prompt_summary()`; output to `data/outputs/`). Every worker records a `before`
+snapshot in the action context so `measure.py` can diff it. The orchestrator
+(`orchestrator/`, TypeScript) spawns `revenueos run <worker> --json` on cron and parses the
+last stdout line.
+
+**Invariants.**
+- Workers never send, publish or spend; only `execute_action` does, after a human
+  decision. Workers are idempotent: every `create_action` passes a `dedupe_key`.
+- Workers must work with `llm=None` and must not import an LLM SDK directly; `llm.py` is
+  the single client. Tests force `REVENUEOS_LLM=off`.
+- Outcomes are honest: `pending` until evidence exists, `measured`/`no_effect` from
+  evidence, `unmeasurable` with a note saying what would measure it. Never synthesise a
+  metric.
+- Do not edit anything under `src/revenueos/vendor/`, `skills/`, `agents/`, `tools/`,
+  `orchestrator/src/{worker/schedule,worker/automations,worker/server,storage/*,util/activityLog}.ts`,
+  `company-context/` templates, `methodology/`, `playbooks/`: all regenerated by
+  `scripts/vendor.py`. Change `VENDOR_MAP`/`PATCHES` in that script instead.
+  RevenueOS-owned files inside vendor directories: `vendor/*/__init__.py`,
+  `vendor/sales_agent/settings.py`.
+- Licence gate: `vendor.py` refuses non-MIT/Apache upstreams. The one GPL source RevenueOS
+  integrates with runs across a process boundary only, never in-process. Unlicensed
+  sources stay reference-only and are never vendored.
+- `company-context/` must keep validating (`revenueos validate`). Never add files there;
+  machine config goes in `revenueos.yaml`.
+- Corrections go to `learning-loop/CORRECTIONS.md`, newest first, never deleted;
+  `ctx.prompt_summary()` injects the last 30 days.
+- Panel: `/health` is public; everything else requires the session cookie when
+  `REVENUEOS_PANEL_PASSWORD` is set; it refuses non-loopback binds without it.
+  `/billing/*` is handled by `billing.billing_http`; `/site/` serves `website/`.
+- Tiers: Community = manual runs; Pro = continuous operation (`orchestrator` without
+  `--once`), gated by `billing.require_tier`. Licence = HMAC-signed key in
+  `data/license.json`, verified with `REVENUEOS_LICENSE_SECRET`; the Stripe webhook issues
+  keys and appends `data/licenses.jsonl`.
+
+**Where each worker's substance comes from:** see `NOTICE.md` for the specific upstream
+project behind each worker's vendored core; in brief — `ads-audit` runs adapters/scoring/
+reporting over `data/exports/ads-<platform>.csv` (a 13-column generic export format);
+`monitor` runs a Hacker News search plus a default-reject relevance gate built from a
+business "brain" derived from the canon; `seo` runs a site crawl, a domain-authority
+comparison, and an optional local project probe, each finding pointing at a matching SEO
+skill; `outreach` runs recipe-based drafting and a CASL-compliant renderer with an
+approval state machine, daily cap, and suppression list; `inbox` runs reply-quotation
+stripping over IMAP or dropped `.eml` files; `discover` reads an external lead-generation
+service's JSON output (process boundary) or CSV drops; `content` matches the registry to
+`ctx.channels`; `measure` re-crawls (seo), reads send rows (outreach), reads the next
+export (ads), or checks deliverable presence (content).
+
+**Orchestrator.** `orchestrator/src/worker/index.ts` runs a tick loop; `runner.ts` spawns
+the CLI (`REVENUEOS_BIN` overrides). Schedule: `data/automations.json`. The status API on
+:8790 is open unless `REVENUEOS_WORKER_TOKEN` is set. A failure classified as transient
+gets exactly one retry.
+
+**Deployment.** `Dockerfile` (Python + Node in one image, HEALTHCHECK on `/health`),
+`docker-compose.yml` (orchestrator, panel, optional GPL outreach-service profile),
+`deploy/` (Fly.io, Railway, Caddy TLS, runbook, `smoke.sh`). In containers `revenueos.yaml`
+lives on the `data/` volume (`REVENUEOS_CONFIG_IN_DATA=1`); never bind-mount the file
+itself.
+
+**Testing conventions.** `tests/conftest.py` builds a throwaway workspace (real
+`company-context/` copy, symlinked `skills/`, fresh DB, `REVENUEOS_LLM=off`) and an
+`onboarded` fixture with a fictional company. Network is monkeypatched at the crawl,
+search, and authority-check call sites in the workers that use them. The panel is tested
+over real HTTP (`tests/test_panel.py`), billing with a mock HTTP transport
+(`tests/test_billing.py`), the CLI LLM provider with a fake subprocess call.
+
+## Provenance
+
+`NOTICE.md` and `THIRD_PARTY_LICENSES/` are the complete, authoritative record of which
+upstream projects RevenueOS is assembled from, under which licence, and why a handful of
+candidate sources were deliberately excluded. `VENDOR.json` maps every vendored file back
+to its source repository and commit. Read those three before asking "where did this code
+come from."

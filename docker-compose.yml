@@ -1,0 +1,108 @@
+# RevenueOS runtime topology (all optional — `revenueos` runs fine as a bare CLI).
+#
+#   docker compose up orchestrator panel            # always-on scheduler + control panel
+#   docker compose --profile proxy up -d            # + Caddy TLS reverse proxy in front of panel (see deploy/README.md)
+#   docker compose --profile outreach up            # + OpenOutreach (GPL-3.0) as an isolated service
+#
+# The GPL service shares nothing with the RevenueOS process except the compose network and
+# the `openoutreach find N --json` stdout contract (see NOTICE.md).
+#
+# Secrets: set these in a .env file next to this compose file (never commit it) or export
+# them in the shell that runs `docker compose`. Full list and how to provision each:
+# deploy/README.md.
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["revenueos", "orchestrator"]
+    environment:
+      - REVENUEOS_ROOT=/app
+      - REVENUEOS_CONFIG_IN_DATA=1   # revenueos.yaml lives on the ./data volume in containers
+      - REVENUEOS_WORKER_TOKEN=${REVENUEOS_WORKER_TOKEN:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - IMAP_PASSWORD=${IMAP_PASSWORD:-}
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./company-context:/app/company-context
+      - ./learning-loop:/app/learning-loop
+    ports:
+      - "8790:8790"   # bearer-token status API: /health /runs /activity
+    # server.ts gates every route (including /health) behind the bearer token once
+    # REVENUEOS_WORKER_TOKEN is set, so the healthcheck must send the same token.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -H \"Authorization: Bearer ${REVENUEOS_WORKER_TOKEN:-}\" http://127.0.0.1:8790/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["revenueos", "serve", "--host", "0.0.0.0", "--port", "8791"]
+    environment:
+      - REVENUEOS_ROOT=/app
+      - REVENUEOS_CONFIG_IN_DATA=1   # revenueos.yaml lives on the ./data volume in containers
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      # Required in practice: panel.py refuses to bind 0.0.0.0 (above) and
+      # exits without this set. Not enforced here with `:?` — docker compose
+      # interpolates every service's environment up front regardless of
+      # which service you name on `up`, so a hard requirement on this
+      # service would also block starting `orchestrator` alone.
+      - REVENUEOS_PANEL_PASSWORD=${REVENUEOS_PANEL_PASSWORD:-}
+      - REVENUEOS_LICENSE_SECRET=${REVENUEOS_LICENSE_SECRET:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_PRICE_PRO=${STRIPE_PRICE_PRO:-}
+      - STRIPE_PRICE_BUSINESS=${STRIPE_PRICE_BUSINESS:-}
+      - STRIPE_PRICE_AGENCY=${STRIPE_PRICE_AGENCY:-}
+    volumes:
+      - ./data:/app/data
+      - ./company-context:/app/company-context
+      - ./learning-loop:/app/learning-loop
+    ports:
+      - "127.0.0.1:8791:8791"   # /health is unauthenticated; everything else needs the session — keep this on localhost or behind Caddy (--profile proxy)
+    # Uses the Dockerfile's HEALTHCHECK (curls 127.0.0.1:8791/health — unauthenticated by design).
+
+  caddy:
+    profiles: ["proxy"]
+    image: caddy:2-alpine
+    depends_on:
+      panel:
+        condition: service_healthy
+    environment:
+      # A soft default, not `:?required` — docker compose interpolates every
+      # service's environment up front regardless of which --profile is
+      # active, so a hard requirement here would block `panel`/`orchestrator`
+      # from starting too. Set REVENUEOS_DOMAIN for real before `--profile proxy up`.
+      - REVENUEOS_DOMAIN=${REVENUEOS_DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+
+  openoutreach:
+    profiles: ["outreach"]
+    image: ghcr.io/eracle/openoutreach:latest
+    stdin_open: true
+    tty: true
+    environment:
+      - OPENOUTREACH_DB=/app/data/db.sqlite3
+    volumes:
+      - ./services/openoutreach/data:/app/data
+    # first run: docker compose run --rm openoutreach init   (the wizard asks for LLM key, mailbox, legal notice)
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,39 @@
+name: Hosted access request
+description: Request RevenueOS Pro, Business or Agency (we run the orchestrator and panel for you).
+title: "Hosted access: "
+labels: ["hosted-access"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us about the business you want RevenueOS to run for. We reply on this issue with next steps and a checkout link. Nothing here is billed; do not post credentials.
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Tier
+      options:
+        - Pro ($99/month) — continuous operation, hosted panel, measurement history
+        - Business ($299/month) — multi-brand, multi-user, CRM sync
+        - Agency ($999/month) — multi-client, white-label, API
+    validations:
+      required: true
+  - type: input
+    id: website
+    attributes:
+      label: Business website
+      placeholder: https://
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: What should RevenueOS work on first?
+      placeholder: e.g. SEO for our docs site, outbound to dental clinics, wasted ad spend on Google
+    validations:
+      required: true
+  - type: input
+    id: contact
+    attributes:
+      label: How should we reach you? (email or GitHub handle)
+    validations:
+      required: true

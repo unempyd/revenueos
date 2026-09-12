@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RevenueOS — Proof</title>
+<meta name="description" content="The full command transcript and screenshots from a real RevenueOS run against a real business: what it found, what it executed, and what it measured.">
+<style>
+  :root{
+    --bg:#fafaf9; --panel:#ffffff; --ink:#0f172a; --ink-soft:#44506b; --muted:#6b7280;
+    --border:#e6e7eb; --accent:#3d3ff0; --accent-ink:#ffffff; --accent-soft:#eef0ff;
+    --good:#0f7a52; --good-soft:#e8f6ef; --code-bg:#0f172a; --code-ink:#e6ecff;
+    --radius:14px; --shadow:0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.05);
+  }
+  *{box-sizing:border-box}
+  html{color-scheme:light}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding-inline:20px;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px; margin-inline:auto}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; background:var(--accent-soft); color:#28299e; padding:1px 6px; border-radius:5px; font-size:12.8px}
+
+  header.topnav{position:sticky; top:0; z-index:20; backdrop-filter:blur(6px); background:rgba(250,250,249,.86); border-bottom:1px solid var(--border)}
+  .topnav .row{display:flex; align-items:center; justify-content:space-between; padding-block:14px; gap:16px; flex-wrap:wrap}
+  .brand{display:flex; align-items:center; gap:9px; font-weight:700; font-size:18px; color:var(--ink)}
+  .brand .dot{width:10px; height:10px; border-radius:3px; background:var(--accent); display:inline-block}
+  nav.links{display:flex; gap:22px; font-size:14.5px; color:var(--ink-soft); flex-wrap:wrap; row-gap:6px}
+  nav.links a{color:var(--ink-soft)}
+  nav.links a.on, nav.links a:hover{color:var(--accent)}
+
+  section{padding-block:56px}
+  section.tight{padding-block:36px}
+  h1{font-size:clamp(30px,5vw,44px); line-height:1.1; margin:0 0 14px; letter-spacing:-0.01em}
+  h2{font-size:clamp(22px,3vw,28px); margin:0 0 10px; letter-spacing:-0.01em}
+  h3{font-size:17px; margin:0 0 8px}
+  .eyebrow{font-size:12.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent)}
+  .lede{font-size:17px; color:var(--ink-soft); max-width:720px; margin:0 0 8px}
+
+  .meta-row{display:flex; flex-wrap:wrap; gap:12px; margin-top:20px}
+  .meta-chip{background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:6px 14px; font-size:13px; color:var(--ink-soft); box-shadow:var(--shadow)}
+  .meta-chip b{color:var(--ink)}
+
+  .shots{display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:32px}
+  @media (max-width:760px){ .shots{grid-template-columns:1fr} }
+  .shots figure{margin:0}
+  .shots img{width:100%; height:auto; display:block; border-radius:12px; border:1px solid var(--border); box-shadow:var(--shadow)}
+  .shots figcaption{margin-top:8px; font-size:12.5px; color:var(--muted)}
+  .shots.three{grid-template-columns:repeat(3,1fr)}
+  @media (max-width:900px){ .shots.three{grid-template-columns:1fr 1fr} }
+  @media (max-width:600px){ .shots.three{grid-template-columns:1fr} }
+
+  .code-block{background:var(--code-bg); color:var(--code-ink); border-radius:var(--radius); padding:22px 24px; box-shadow:var(--shadow); overflow-x:auto; margin-top:20px}
+  .code-block pre{margin:0; font-size:13.5px; line-height:1.7; white-space:pre}
+  .code-block .c1{color:#7d879e}
+
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px 24px; margin-top:24px}
+  ul.plain{list-style:none; margin:0; padding:0}
+  ul.plain li{display:flex; gap:10px; align-items:flex-start; margin-bottom:12px; color:var(--ink-soft); font-size:15px}
+  ul.plain li b{color:var(--ink)}
+  .tick{flex:0 0 auto; width:20px; height:20px; border-radius:50%; background:var(--good-soft); color:var(--good); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800}
+
+  .table-wrap{overflow-x:auto; margin-top:20px; border:1px solid var(--border); border-radius:var(--radius); background:var(--panel); box-shadow:var(--shadow)}
+  table{width:100%; border-collapse:collapse; min-width:520px}
+  thead th{text-align:left; font-size:13px; letter-spacing:.02em; padding:12px 16px; border-bottom:1px solid var(--border); background:#fbfbfe}
+  tbody td, tbody th{text-align:left; font-size:13.8px; color:var(--ink-soft); padding:10px 16px; border-bottom:1px solid var(--border); font-weight:400}
+  tbody tr:last-child td, tbody tr:last-child th{border-bottom:none}
+  tbody th{color:var(--ink); font-weight:600; white-space:nowrap}
+
+  .todo-link{border-bottom:1px dashed var(--muted)}
+
+  footer{border-top:1px solid var(--border); padding-block:38px; margin-top:20px}
+  .foot-row{display:flex; flex-wrap:wrap; gap:18px; justify-content:space-between; align-items:flex-start; font-size:13.5px; color:var(--muted)}
+  .foot-links{display:flex; gap:18px; flex-wrap:wrap}
+  .foot-links a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+
+<header class="topnav">
+  <div class="wrap row">
+    <div class="brand"><span class="dot"></span>RevenueOS</div>
+    <nav class="links">
+      <a href="index.html#loop">How it works</a>
+      <a href="index.html#evidence">Evidence</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="index.html#install">Install</a>
+      <a href="index.html#inside">Built in the open</a>
+      <a href="proof.html" class="on">Proof</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section>
+    <div class="eyebrow">Proof</div>
+    <h1>What RevenueOS actually did, once</h1>
+    <p class="lede">This is the unedited record of a single run: what was found, what was
+      executed, and what was measured, against a real company's public web presence.
+      Nothing here is a mock-up or a projection.</p>
+    <div class="meta-row">
+      <span class="meta-chip"><b>Date</b> 2026-09-12</span>
+      <span class="meta-chip"><b>Business</b> Plausible Analytics (plausible.io)</span>
+      <span class="meta-chip"><b>Access</b> public web presence, read-only</span>
+      <span class="meta-chip"><b>Email sent</b> none</span>
+      <span class="meta-chip"><b>Network</b> live</span>
+    </div>
+  </section>
+
+  <section class="tight">
+    <h2>The brief and the ledger</h2>
+    <p class="lede">Screenshots of the actual control-panel screens from this run.</p>
+    <div class="shots three">
+      <figure>
+        <img src="screenshots/onboard.png" width="1280" height="900" loading="lazy"
+          alt="RevenueOS onboarding screen: the questionnaire that connects a business, showing fields for company, website, competitors and channels">
+        <figcaption>Connect — the onboarding form.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/today.png" width="1280" height="900" loading="lazy"
+          alt="RevenueOS today brief screen listing six content opportunities found for Plausible Analytics, each with Approve, Execute and Ignore controls">
+        <figcaption>Today — 6 content opportunities found.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/results.png" width="1280" height="900" loading="lazy"
+          alt="RevenueOS results screen showing 6 opportunities found, 1 executed, 1 measured, with the seo-content-brief action marked deliverable_written 0 to 1">
+        <figcaption>Results — 1 executed, 1 measured.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="tight">
+    <h2>The full command transcript</h2>
+    <p class="lede">Every command run in this session, in order, with its actual output.
+      Nothing has been trimmed except the workspace path.</p>
+    <div class="code-block">
+<pre><span class="c1">$ revenueos workspace new &lt;dir&gt;</span>
+workspace ready: &lt;dir&gt;
+
+<span class="c1">$ revenueos --root &lt;dir&gt; init --answers demo-answers.json</span>
+Onboarded Plausible Analytics. Config: revenueos.yaml; canon: company-context/.
+company-context validates.
+
+<span class="c1">$ revenueos --root &lt;dir&gt; run seo            # real crawl of plausible.io + free authority endpoint</span>
+ok   seo        0 SEO opportunity(ies) from 12 crawled pages, 0 crawl findings, authority unavailable (HTTP 403).
+
+<span class="c1">$ revenueos --root &lt;dir&gt; run monitor        # real Hacker News search + Claude relevance gate</span>
+[info] relevance_gate candidates=3 source='Hacker News' surfaced=0
+ok   monitor    0 new market signal(s), 0 relevant HN thread(s) after the Claude relevance gate (default-reject).
+
+<span class="c1">$ revenueos --root &lt;dir&gt; run content        # registry match: channels seo, blog, twitter</span>
+ok   content    6 content opportunity(ies) for channels seo, blog, twitter (week 2026-W37).
+
+<span class="c1">$ revenueos --root &lt;dir&gt; today</span>
+TODAY — Plausible Analytics
+  6 content opportunities
+$0 pipeline generated
+[   6] content_opportunity twitter: social
+[   5] content_opportunity twitter: social-creative-builder
+[   4] content_opportunity blog: x-longform-post
+[   3] content_opportunity blog: seo-blog-writer
+[   2] content_opportunity seo: seo-content-strategy
+[   1] content_opportunity seo: seo-content-brief
+
+<span class="c1">$ revenueos --root &lt;dir&gt; approve 1</span>
+approved [1] seo: seo-content-brief
+
+<span class="c1">$ revenueos --root &lt;dir&gt; execute 1          # Claude runs the vendored seo-content-brief skill</span>
+executed [1] seo: seo-content-brief
+  deliverable written to data/outputs/20260912-seo-content-brief-1.md      (14,014 bytes, 1m23s wall clock)
+
+<span class="c1">$ revenueos --root &lt;dir&gt; run measure</span>
+ok   measure    1 result(s) measured, 0 still pending.
+
+<span class="c1">$ revenueos --root &lt;dir&gt; results</span>
+RESULTS — Plausible Analytics
+6 opportunities found · 1 executed · 1 measured
+0 emails sent · 0 replies · 0 bounces · 0 booked · $0 pipeline
+✓ [   1] seo: seo-content-brief          deliverable_written 0 → 1</pre>
+    </div>
+    <p class="lede" style="margin-top:16px">The deliverable is a full SEO content brief
+      targeting the query "google analytics alternative" (working title, funnel stage,
+      query cluster, outline, CTAs), grounded only in the onboarding answers and labelled
+      user-provided / estimated per the vendored skill's own truth rules.</p>
+  </section>
+
+  <section class="tight">
+    <h2>The same loop over HTTP</h2>
+    <p class="lede">The control panel was started with a password set and exercised the
+      same actions over its HTTP surface.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Request</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><th><code>GET /health</code></th><td><code>{"ok": true, "service": "revenueos-panel", "onboarded": true}</code></td></tr>
+          <tr><th><code>GET /site/</code> and <code>/site/pricing.html</code></th><td>200 (marketing site, 19.5 KB)</td></tr>
+          <tr><th><code>GET /billing/checkout?tier=pro</code></th><td>400 <code>STRIPE_SECRET_KEY is not set</code> (correct without vendor keys)</td></tr>
+          <tr><th><code>GET /results</code> unauthenticated</th><td>401</td></tr>
+          <tr><th><code>POST /login</code> + <code>GET /results</code></th><td><code>1 executed · 1 measured</code>, <code>deliverable_written: 0 → 1</code></td></tr>
+          <tr><th><code>GET /api/today</code></th><td><code>{"found": 6, "executed": 1, "measured": 1, ...}</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="tight">
+    <h2>What's honest about these numbers</h2>
+    <div class="panel">
+      <ul class="plain">
+        <li><span class="tick">✓</span><span><b>Opportunity quality.</b> The crawl found
+          nothing wrong with plausible.io — every page has a title, description and more
+          than 300 characters of body text, and a sitemap is present. The free
+          authority-comparison endpoint the SEO worker relies on now returns HTTP 403, so
+          the authority comparison is reported as unavailable rather than guessed. The
+          Claude relevance gate rejected all three Hacker News candidates it considered.
+          The six content opportunities are the genuine output of the run.</span></li>
+        <li><span class="tick">✓</span><span><b>Measurement.</b>
+          <code>deliverable_written 0 → 1</code> is what RevenueOS can observe for a
+          content action without Search Console connected. The other measurement paths
+          exist and are covered by tests against real state changes:
+          <code>meta_description_fixed</code> (re-crawl), <code>replied</code> (inbox
+          worker over IMAP/.eml), <code>campaign_spend_delta</code> (next ad
+          export).</span></li>
+        <li><span class="tick">✓</span><span><b>Pipeline.</b> <code>$0 pipeline</code> is
+          true: no lead was contacted. The pipeline number moves when the outreach loop
+          runs with a real mailbox (SMTP/IMAP credentials), which this machine does not
+          have. That path is tested end to end with a dry-run sender and .eml
+          replies.</span></li>
+        <li><span class="tick">✓</span><span><b>Cost.</b> One Claude execution of a skill
+          cost roughly $0.20–$0.50 in API-equivalent tokens for this run.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="tight">
+    <h2>Reproduce it</h2>
+    <div class="code-block">
+<pre>uv sync --extra dev &amp;&amp; (cd orchestrator &amp;&amp; npm install)
+revenueos workspace new /tmp/ros-demo
+revenueos --root /tmp/ros-demo init          <span class="c1"># or --answers file.json</span>
+revenueos --root /tmp/ros-demo run all &amp;&amp; revenueos --root /tmp/ros-demo today
+revenueos --root /tmp/ros-demo approve &lt;id&gt; &amp;&amp; revenueos --root /tmp/ros-demo execute &lt;id&gt;
+revenueos --root /tmp/ros-demo run measure &amp;&amp; revenueos --root /tmp/ros-demo results</pre>
+    </div>
+    <p class="lede" style="margin-top:16px">
+      <a class="todo-link" href="https://github.com/unempyd/revenueos/blob/main/docs/proof.md" data-todo="replace with the public repo URL once published">The source record, docs/proof.md, on GitHub →</a>
+    </p>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-row">
+    <div>© 2026 RevenueOS. Open-source core (MIT). Nothing sends, publishes or spends
+      without your approval.</div>
+    <div class="foot-links">
+      <a href="index.html#loop">How it works</a>
+      <a href="index.html#install">Install</a>
+      <a href="index.html#inside">Built in the open</a>
+      <a class="todo-link" href="https://github.com/unempyd/revenueos/blob/main/docs/security-and-approval.md" data-todo="replace with the public repo URL once published">Security &amp; approval</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

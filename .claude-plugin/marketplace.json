@@ -1,0 +1,47 @@
+{
+  "name": "revenueos-marketplace",
+  "owner": {
+    "name": "RevenueOS"
+  },
+  "metadata": {
+    "description": "RevenueOS Community: connect, analyse, and see the opportunity, action and measured result for a real business — SEO, ads, lead discovery, sales follow-up, marketing intelligence and revenue monitoring, wrapped as Agent Skills over the revenueos CLI and MCP server.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "revenueos",
+      "source": ".",
+      "description": "Six RevenueOS Community capabilities (SEO Auditor, Ads Auditor, Lead Discovery, Sales Follow-up, Marketing Intelligence, Revenue Monitor) plus the revenueos-mcp server. Nothing sends, publishes or spends without an explicit human approval.",
+      "version": "0.1.0",
+      "author": {
+        "name": "RevenueOS"
+      },
+      "homepage": "https://revenueos.com",
+      "repository": "https://github.com/unempyd/revenueos",
+      "license": "MIT",
+      "category": "marketing",
+      "tags": [
+        "agent-skills",
+        "revenue-operations",
+        "seo-audit",
+        "ads-audit",
+        "lead-discovery",
+        "sales-outreach",
+        "marketing-intelligence",
+        "revenue-monitoring",
+        "mcp"
+      ],
+      "keywords": [
+        "agent-skills",
+        "revenue-operations",
+        "seo",
+        "ads-audit",
+        "lead-discovery",
+        "cold-email",
+        "marketing-intelligence",
+        "claude-code-skill",
+        "mcp"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-06-18/server.schema.json",
+  "name": "io.github.unempyd/revenueos",
+  "description": "RevenueOS Community over MCP: connect a business and run its SEO Auditor, Ads Auditor, Lead Discovery, Sales Follow-up, Marketing Intelligence and Revenue Monitor capabilities. Nothing sends, publishes or spends without an explicit approve + execute.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/unempyd/revenueos",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registry_type": "pypi",
+      "identifier": "revenueos",
+      "version": "0.1.0",
+      "runtime_hint": "uv",
+      "transport": {
+        "type": "stdio"
+      },
+      "package_arguments": [
+        {
+          "type": "positional",
+          "value": "revenueos-mcp"
+        }
+      ],
+      "environment_variables": [
+        {
+          "name": "REVENUEOS_ROOT",
+          "description": "Path to the onboarded RevenueOS workspace (company-context/ + skills/). Defaults to the current directory when unset.",
+          "is_required": false
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "description": "Optional: enables LLM-driven personalisation and skill execution. Workers still run their deterministic path without it.",
+          "is_required": false,
+          "is_secret": true
+        },
+        {
+          "name": "REVENUEOS_DRY_RUN",
+          "description": "Set to 1 (the Community default) to write outreach sends to data/outputs/ instead of over real SMTP.",
+          "is_required": false
+        }
+      ]
+    }
+  ],
+  "remotes": []
+}
