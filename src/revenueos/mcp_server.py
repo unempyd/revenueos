@@ -119,11 +119,13 @@ def revenueos_ads_audit(csv_path: str, platform: str) -> dict[str, Any]:
 
 @mcp.tool()
 def revenueos_discover_leads(csv_path: str | None = None) -> dict[str, Any]:
-    """RevenueOS Lead Discovery: find qualified prospects via OpenOutreach (when installed,
-    across a process boundary) and any CSV drop already in data/exports/. Pass `csv_path`
-    (Instantly/Smartlead columns: email, first_name, last_name, company, title, website,
-    linkedin_url, reason) to import one more file first — it is copied into
-    data/exports/leads-<timestamp>.csv. Each new lead becomes a prospect action."""
+    """RevenueOS Lead Discovery: read prospects from OpenOutreach (when installed, across a
+    process boundary) and any CSV drop already in data/exports/, then run the qualification
+    gate. Pass `csv_path` (Instantly/Smartlead columns: email, first_name, last_name, company,
+    title, website, linkedin_url, reason) to import one more file first — it is copied into
+    data/exports/leads-<timestamp>.csv. Only a QUALIFIED lead (business email + business
+    website + a real company name) becomes a prospect action; the result reports found,
+    contactable and qualified as separate numbers. A qualified_at column is ignored."""
     ws, store, ctx = _boot()
     if csv_path:
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")

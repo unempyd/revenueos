@@ -96,7 +96,8 @@ class OutreachWorker:
         recipe = build_recipe(ctx)
         limit = int((ctx.config.get("outreach") or {}).get("drafts_per_run", 10))
         created, skipped = 0, 0
-        candidates = [l for l in store.list_leads() if l["status"] in ("new", "enriched", "scored")]
+        # only leads the gate qualified ('scored'); 'new' means found-but-not-qualified
+        candidates = [l for l in store.list_leads() if l["status"] == "scored" and (l.get("contact_email") or "").strip()]
         for lead in candidates[:limit]:
             email = (lead.get("contact_email") or "").strip()
             if not email or store.is_unsubscribed(email):

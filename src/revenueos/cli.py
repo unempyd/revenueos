@@ -73,7 +73,7 @@ def cmd_today(args: argparse.Namespace) -> int:
     _ws, store, ctx = _boot(args)
     brief = build_brief(store)
     if args.json:
-        print(json.dumps({"counts": brief.counts, "pipeline_value": brief.pipeline_value, "actions": brief.actions, "metrics": brief.metrics}, indent=2, default=str))
+        print(json.dumps({"counts": brief.counts, "funnel": brief.funnel, "pipeline_value": brief.pipeline_value, "actions": brief.actions, "metrics": brief.metrics}, indent=2, default=str))
     else:
         print(brief.render_text(ctx.company_name))
     return 0

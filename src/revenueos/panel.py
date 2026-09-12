@@ -160,7 +160,7 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
             msg = parse_qs(url.query).get("msg", [""])[0]
             if path == "/api/today":
                 b = build_brief(store)
-                self._send(json.dumps({"counts": b.counts, "pipeline_value": b.pipeline_value, "actions": b.actions,
+                self._send(json.dumps({"counts": b.counts, "funnel": b.funnel, "pipeline_value": b.pipeline_value, "actions": b.actions,
                                        "results": b.results, "summary": b.summary}, default=str), ctype="application/json")
             elif path == "/results":
                 self._send(self._page("RESULTS", f"{ctx.company_name} — what RevenueOS did and what happened", self._results_html(), msg))

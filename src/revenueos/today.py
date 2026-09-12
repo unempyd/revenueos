@@ -1,5 +1,6 @@
 """TODAY — the whole customer-facing surface: what RevenueOS found, what it did, what happened.
 
+    leads: 40 found · 18 contactable · 12 qualified
     12 qualified prospects found
      3 follow-ups ready
      ...
@@ -39,9 +40,21 @@ class Brief:
     metrics: dict[str, float]
     results: list[dict[str, Any]] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
+    funnel: dict[str, int] = field(default_factory=dict)
+
+    def funnel_line(self) -> str | None:
+        """'leads: 30 found · 9 contactable · 0 qualified' — three numbers, reported separately, so
+        the "qualified prospects" line below can only ever mean what it says."""
+        f = self.funnel
+        if not f or not f.get("found"):
+            return None
+        return f"leads: {f['found']} found · {f.get('contactable', 0)} contactable · {f.get('qualified', 0)} qualified"
 
     def lines(self) -> list[str]:
         out = []
+        fl = self.funnel_line()
+        if fl:
+            out.append(fl)
         for atype, singular, plural in LINES:
             n = self.counts.get(atype, 0)
             if n:
@@ -123,4 +136,5 @@ def build_brief(store: Store) -> Brief:
         metrics=store.latest_metrics(),
         results=store.executed_actions(),
         summary=store.results_summary(),
+        funnel=store.lead_funnel(),
     )

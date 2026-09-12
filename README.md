@@ -72,7 +72,7 @@ either, every worker still runs its deterministic checks.
 |---|---|---|---|
 | `seo` | crawl defects, authority gap, indexing surface | the matching SEO skill | re-crawl: fixed or not |
 | `ads-audit` | wasted spend, over-pacing, concentration in ad exports | the matching ads skill | next export delta |
-| `discover` | prospects from lead lists or an external prospecting service | — | via outreach |
+| `discover` | prospects from lead lists or an external prospecting service, through the qualification gate (business email + website + real company; reported as found · contactable · qualified) | — | via outreach |
 | `outreach` | first-touch drafts from your canon | sends (daily cap, suppression list, unsubscribe footer) | replies, booked, pipeline value |
 | `inbox` | replies, bounces and STOP requests on your mailbox | — | feeds outreach outcomes |
 | `content` | content work matched to your channels | Claude produces the deliverable | deliverable written |

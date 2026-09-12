@@ -1,4 +1,4 @@
-"""DISCOVER — find qualified prospects.
+"""DISCOVER — find prospects and let the gate say which are qualified.
 
 Sources, in order:
   1. OpenOutreach (GPL-3.0, eracle/OpenOutreach) across a process boundary: if the
@@ -7,7 +7,10 @@ Sources, in order:
      linked into this process; stdout is the whole contract, exactly as its SKILL.md states.
   2. CSV drops in data/exports/leads*.csv using the OpenOutreach / Instantly / Smartlead
      column names (email, first_name, last_name, company, title, website, linkedin_url, reason).
-Every new lead becomes one `prospect` action.
+Every row passes the qualification gate (revenueos.qualify) before anything else looks at
+it. Only a QUALIFIED lead — business email + business website + a real company name —
+becomes a `prospect` action and counts on TODAY. A `qualified_at` column in an import is
+ignored: files describe leads, they do not get to assert qualification.
 """
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ from typing import Any
 from ..context import BusinessContext
 from ..llm import LLM
 from ..paths import Workspace
+from ..qualify import clean_company, normalise_row, qualify
 from ..store import Store
 from . import WorkerResult
 
@@ -69,48 +73,65 @@ def read_csv_drops(ws: Workspace) -> list[dict[str, Any]]:
     return rows
 
 
-def ingest(store: Store, rows: list[dict[str, Any]], run_id: int, default_source: str) -> int:
-    created = 0
-    for r in rows:
+def ingest(store: Store, rows: list[dict[str, Any]], run_id: int, default_source: str) -> dict[str, int]:
+    """Upsert every row as a lead, run the gate, and create a prospect action only for the
+    qualified ones. Returns the funnel for this batch: found, contactable, qualified, created."""
+    found = contactable = qualified = created = 0
+    for raw in rows:
+        r = normalise_row(raw)
         source = r.get("_source", default_source)
-        source_id = r.get("lead_id") or r.get("email") or r.get("linkedin_url") or r.get("website")
-        company = r.get("company") or r.get("business_name") or r.get("email", "").split("@")[-1]
+        source_id = r.get("lead_id") or r.get("email") or r.get("linkedin_url") or r.get("profile_url") or r.get("website")
+        company, _problem = clean_company(r.get("company") or r.get("business_name") or "")
+        if not company and r.get("email"):
+            company = r["email"].split("@")[-1]
         if not company:
             continue
+        found += 1
+        verdict = qualify(r)
+        contactable += 1 if verdict.contactable else 0
         lead_id = store.upsert_lead(
             source, source_id, company,
             first_name=r.get("first_name"), last_name=r.get("last_name"), title=r.get("title"),
-            website_url=r.get("website"), linkedin_url=r.get("linkedin_url"),
+            website_url=r.get("website") or None, linkedin_url=r.get("linkedin_url") or r.get("profile_url") or None,
             contact_email=(r.get("email") or None), reason=r.get("reason"),
         )
+        store.set_qualification(lead_id, verdict.qualified, verdict.reasons, score=3 if verdict.qualified else 0)
+        if not verdict.qualified:
+            continue
+        qualified += 1
         who = " ".join(x for x in (r.get("first_name"), r.get("last_name")) if x) or r.get("email") or company
         title = f"{who} at {company}" if who != company else company
         aid = store.create_action(
             "prospect", f"Qualified prospect: {title}",
             r.get("reason") or f"Found via {source}. {r.get('title') or ''}".strip(),
-            run_id=run_id, context={"lead_id": lead_id, "source": source},
-            source_url=r.get("linkedin_url") or r.get("website") or None,
+            run_id=run_id, context={"lead_id": lead_id, "source": source, "qualification": verdict.as_dict()},
+            source_url=r.get("website") or r.get("linkedin_url") or None,
             dedupe_key=f"prospect:{lead_id}",
         )
         if aid:
             created += 1
-    return created
+    return {"found": found, "contactable": contactable, "qualified": qualified, "created": created}
 
 
 class DiscoverWorker:
     name = "discover"
-    description = "Find qualified prospects (OpenOutreach via process boundary, or CSV drops in data/exports/)."
+    description = "Find prospects (OpenOutreach via process boundary, or CSV drops in data/exports/) and qualify them: business email + website + real company."
     upstream = "eracle/OpenOutreach (process boundary), ai-sales-agent lead model"
 
     def run(self, ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, run_id: int) -> WorkerResult:
         goal = int((ctx.config.get("discover") or {}).get("goal", 5))
         oo_rows = fetch_openoutreach(goal) if openoutreach_command() else []
         csv_rows = read_csv_drops(ws)
-        created = ingest(store, oo_rows, run_id, "openoutreach") + ingest(store, csv_rows, run_id, "csv")
+        a = ingest(store, oo_rows, run_id, "openoutreach")
+        b = ingest(store, csv_rows, run_id, "csv")
+        batch = {k: a[k] + b[k] for k in a}
+        funnel = store.lead_funnel()
         note = "" if openoutreach_command() else " OpenOutreach not installed (pip install openoutreach, or docker compose --profile outreach up)."
         return WorkerResult(
             ok=True,
-            summary=f"{created} new prospect(s) from {len(oo_rows)} OpenOutreach rows and {len(csv_rows)} CSV rows.{note}",
-            actions_created=created,
-            details={"openoutreach_rows": len(oo_rows), "csv_rows": len(csv_rows)},
+            summary=(f"{batch['found']} lead(s) read, {batch['contactable']} contactable, {batch['qualified']} qualified; "
+                     f"{batch['created']} new prospect action(s). Workspace: {funnel['found']} found · {funnel['contactable']} contactable · "
+                     f"{funnel['qualified']} qualified.{note}"),
+            actions_created=batch["created"],
+            details={"openoutreach_rows": len(oo_rows), "csv_rows": len(csv_rows), "batch": batch, "funnel": funnel},
         )

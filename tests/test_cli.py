@@ -2,7 +2,7 @@ import json
 
 from revenueos.cli import main
 
-LEADS = "email,first_name,last_name,company,title,website,linkedin_url,reason\nx@y.example,X,Y,Y Inc,CEO,,,fits\n"
+LEADS = "email,first_name,last_name,company,title,website,linkedin_url,reason\nx@y.example,X,Y,Y Inc,CEO,https://y.example,,fits\n"
 
 
 def test_init_run_today_approve_flow(workspace, answers_file, capsys):
@@ -18,6 +18,7 @@ def test_init_run_today_approve_flow(workspace, answers_file, capsys):
     assert main(["--root", str(workspace.root), "today"]) == 0
     out = capsys.readouterr().out
     assert "TODAY — Acme Scheduling" in out and "1 qualified prospect found" in out and "$0 pipeline generated" in out
+    assert "leads: 1 found · 1 contactable · 1 qualified" in out
 
     assert main(["--root", str(workspace.root), "today", "--json"]) == 0
     brief = json.loads(capsys.readouterr().out)

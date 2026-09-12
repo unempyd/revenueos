@@ -20,6 +20,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .qualify import QUALIFIED_STATUSES
+
 ACTION_STATUSES = ("pending", "approved", "executed", "ignored", "failed")
 ACTION_TYPES = (
     "prospect",            # qualified prospects found
@@ -283,9 +285,11 @@ class Store:
         with self._conn() as c:
             existing = None
             if source_id:
-                existing = c.execute("SELECT id FROM leads WHERE source=? AND source_id=?", (source, source_id)).fetchone()
+                existing = c.execute("SELECT id, business_name FROM leads WHERE source=? AND source_id=?", (source, source_id)).fetchone()
             cols = {k: v for k, v in fields.items() if v is not None}
             if existing:
+                if business_name and business_name != existing["business_name"]:
+                    cols["business_name"] = business_name  # e.g. '{acmeAI}' → 'acmeAI' after the gate's cleaning
                 if cols:
                     sets = ", ".join(f"{k}=?" for k in cols)
                     c.execute(f"UPDATE leads SET {sets}, updated_at=? WHERE id=?", (*cols.values(), now(), existing["id"]))
@@ -311,7 +315,13 @@ class Store:
             return [dict(r) for r in rows]
 
     def transition_lead(self, lead_id: str, status: str, payload: dict[str, Any] | None = None) -> None:
+        """Invariant (same standard as outcomes): a lead without a contact email can never hold a
+        qualified status — 'scored' or anything downstream of it."""
         with self._conn() as c:
+            if status in QUALIFIED_STATUSES:
+                row = c.execute("SELECT contact_email FROM leads WHERE id=?", (lead_id,)).fetchone()
+                if not row or not (row["contact_email"] or "").strip():
+                    raise ValueError(f"lead {lead_id} has no contact email and cannot be {status!r}")
             c.execute("UPDATE leads SET status=?, updated_at=? WHERE id=?", (status, now(), lead_id))
             c.execute("INSERT INTO lead_events (at, lead_id, kind, payload) VALUES (?,?,?,?)",
                       (now(), lead_id, f"status:{status}", json.dumps(payload) if payload else None))
@@ -322,6 +332,43 @@ class Store:
             return float(row["v"])
 
     # ── drafts / sends (human-approval state machine) ───────────────────────
+    def set_qualification(self, lead_id: str, qualified: bool, reasons: list[str], score: int = 0) -> None:
+        """Record the gate's verdict. Qualified → 'scored'; not qualified → 'new' (and any pending
+        draft or prospect/follow-up action for the lead is withdrawn). Leads already sent/replied/
+        booked keep their status — history is never rewritten."""
+        lead = self.get_lead(lead_id)
+        if not lead:
+            raise KeyError(lead_id)
+        notes = {"qualification": {"qualified": qualified, "reasons": reasons, "at": now()}}
+        with self._conn() as c:
+            c.execute("UPDATE leads SET score=?, notes=?, updated_at=? WHERE id=?", (score, json.dumps(notes), now(), lead_id))
+        if lead["status"] in ("sent", "opened", "replied", "booked", "paused", "dead"):
+            return
+        if qualified:
+            if lead["status"] != "drafted":
+                self.transition_lead(lead_id, "scored", {"reasons": reasons})
+            return
+        with self._conn() as c:
+            c.execute("UPDATE email_drafts SET approval_state='rejected', approved_by='gate', approved_at=? "
+                      "WHERE lead_id=? AND approval_state IN ('pending','approved','edited')", (now(), lead_id))
+            for a in c.execute("SELECT id, context FROM actions WHERE status='pending' AND action_type IN ('prospect','follow_up')"):
+                ctx = json.loads(a["context"]) if a["context"] else {}
+                if ctx.get("lead_id") == lead_id:
+                    c.execute("UPDATE actions SET status='ignored', decided_at=? WHERE id=?", (now(), a["id"]))
+        if lead["status"] != "new":
+            self.transition_lead(lead_id, "new", {"withdrawn": reasons})
+
+    def lead_funnel(self) -> dict[str, int]:
+        """found · contactable · qualified — three separate numbers, none stands in for another."""
+        marks = ",".join("?" * len(QUALIFIED_STATUSES))
+        with self._conn() as c:
+            found = c.execute("SELECT COUNT(*) n FROM leads").fetchone()["n"]
+            contactable = c.execute("SELECT COUNT(*) n FROM leads WHERE contact_email IS NOT NULL AND TRIM(contact_email) != ''").fetchone()["n"]
+            qualified = c.execute(
+                f"SELECT COUNT(*) n FROM leads WHERE status IN ({marks}) AND contact_email IS NOT NULL AND TRIM(contact_email) != ''",
+                tuple(sorted(QUALIFIED_STATUSES))).fetchone()["n"]
+        return {"found": found, "contactable": contactable, "qualified": qualified}
+
     def create_draft(self, lead_id: str, recipe_key: str, subject_variant: str, subject: str, body: str, model: str) -> str:
         draft_id = str(uuid.uuid4())
         with self._conn() as c:
