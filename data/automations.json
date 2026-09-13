@@ -41,6 +41,27 @@
       "skill": "monitor",
       "enabled": true,
       "description": "Health and pipeline monitor, every 6 hours."
+    },
+    {
+      "name": "billing",
+      "schedule": "15 6 * * *",
+      "skill": "billing",
+      "enabled": true,
+      "description": "Daily Stripe read at 06:15: revenue, MRR, customers, open invoices."
+    },
+    {
+      "name": "analytics",
+      "schedule": "45 6 * * *",
+      "skill": "analytics",
+      "enabled": true,
+      "description": "Daily Search Console / GA4 read at 06:45 when Google is connected."
+    },
+    {
+      "name": "ads-live",
+      "schedule": "30 */6 * * *",
+      "skill": "ads-live",
+      "enabled": true,
+      "description": "Every 6 hours: connected ad accounts, wasting campaigns queued to pause."
     }
   ]
 }

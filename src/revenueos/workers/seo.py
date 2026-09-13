@@ -241,6 +241,34 @@ def probe_repo(repo: Path) -> dict[str, Any] | None:
         return {"raw": proc.stdout[-1000:]}
 
 
+def site_file_for(url: str, site: str) -> str:
+    """The HTML file behind a URL on a static site: '/' → index.html, '/pricing.html' → pricing.html, '/about/' → about/index.html."""
+    path = urlparse(url).path or "/"
+    base = urlparse(site if site.startswith("http") else f"https://{site}").path.rstrip("/")
+    if base and path.startswith(base):
+        path = path[len(base):] or "/"
+    if path.endswith("/"):
+        return (path.strip("/") + "/index.html").lstrip("/")
+    return path.lstrip("/") or "index.html"
+
+
+def deployable_fix(finding: dict[str, Any], ctx: BusinessContext, signals: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The exact <head> change for findings that have one; None means it stays a deliverable for a human."""
+    kind = finding["kind"]
+    if kind == "no_canonical":
+        return {"kind": "canonical", "url": finding["url"]}
+    if kind == "no_local_schema":
+        data: dict[str, Any] = {"@context": "https://schema.org", "@type": "LocalBusiness", "name": ctx.company_name, "url": finding["url"]}
+        phones = (signals or {}).get("phones") or []
+        if phones:
+            data["telephone"] = phones[0]
+        desc = ctx.section("identity.md", "One-Sentence Definition")
+        if desc and "[" not in desc:
+            data["description"] = desc[:300]
+        return {"kind": "jsonld", "data": data}
+    return None
+
+
 class SeoWorker:
     name = "seo"
     description = "Crawl the site, compare authority with competitors, and queue prioritised SEO fixes."
@@ -257,12 +285,19 @@ class SeoWorker:
             for name in ("meta_pixel", "google_ads_tag", "ga4", "gtm", "booking_link", "tel_link", "local_schema"):
                 store.record_metric(f"site_{name}", float(bool(signals.get(name))), site=site)
         findings += signal_findings(site, signals)
+        from ..connections import ConnectionStore
+
+        cs = ConnectionStore(ws)
+        site_conn = cs.get("github_site") or cs.get("wordpress")
         for f in findings:
             src, skill = SKILL_FOR[f["kind"]]
+            context = {"kind": f["kind"], "skill": f"{src}/{skill}", "executor": "run_skill", "skill_input": f["why"], "before": f.get("before")}
+            fix = deployable_fix(f, ctx, signals if f["kind"] in ("no_canonical", "no_local_schema") else None)
+            if site_conn and fix:
+                context.update({"executor": "site_deploy", "fix": fix, "file": site_file_for(f["url"], site), "page_id": site_conn.meta.get("home_page_id")})
             aid = store.create_action(
-                "seo_opportunity", f"SEO: {f['kind'].replace('_', ' ')} — {f['url']}", f["why"],
-                run_id=run_id, source_url=f["url"], dedupe_key=f"seo:{f['kind']}:{f['url']}",
-                context={"kind": f["kind"], "skill": f"{src}/{skill}", "executor": "run_skill", "skill_input": f["why"], "before": f.get("before")},
+                "seo_opportunity", f"SEO: {f['kind'].replace('_', ' ')} — {f['url']}", f["why"] + (" Deployable: the fix is applied to the site on Execute." if site_conn and fix else ""),
+                run_id=run_id, source_url=f["url"], dedupe_key=f"seo:{f['kind']}:{f['url']}", context=context,
             )
             created += 1 if aid else 0
 

@@ -5,4 +5,4 @@ The customer sees one questionnaire and one daily brief (`revenueos today`); eve
 else is workers built on vendored code (see VENDOR.json) driven by the orchestrator.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"

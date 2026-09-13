@@ -143,3 +143,26 @@ class Workspace:
         p = self.root / "logs"
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+
+def new_workspace(dest: Path, source: Path | None = None) -> Path:
+    """A fresh customer workspace that shares an install's catalogue (skills, tools, orchestrator, website)
+    by symlink but has its own canon, config, database and logs. `source` defaults to the located workspace."""
+    import shutil
+
+    src = source or find_root()
+    dest = Path(dest).expanduser().resolve()
+    if (dest / "company-context").exists():
+        raise FileExistsError(f"{dest} already looks like a workspace")
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in ("company-context", "learning-loop"):
+        shutil.copytree(src / name, dest / name)
+    if (src / "VENDOR.json").is_file():
+        shutil.copy2(src / "VENDOR.json", dest / "VENDOR.json")
+    (dest / "data").mkdir(exist_ok=True)
+    if (src / "data" / "automations.json").is_file():
+        shutil.copy2(src / "data" / "automations.json", dest / "data" / "automations.json")
+    for name in ("skills", "agents", "tools", "methodology", "playbooks", "website", "orchestrator"):
+        if (src / name).exists() and not (dest / name).exists():
+            os.symlink(src / name, dest / name)
+    return dest

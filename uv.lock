@@ -1193,10 +1193,11 @@ wheels = [
 
 [[package]]
 name = "revenueos"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "cryptography" },
     { name = "cssselect" },
     { name = "html5lib" },
     { name = "httpx" },
@@ -1226,6 +1227,7 @@ pdf = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=1.0" },
+    { name = "cryptography", specifier = ">=43" },
     { name = "cssselect", specifier = ">=1.2" },
     { name = "html5lib", specifier = ">=1.1" },
     { name = "httpx", specifier = ">=0.28" },

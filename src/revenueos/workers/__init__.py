@@ -44,12 +44,14 @@ def all_workers() -> dict[str, Worker]:
     from .discover import DiscoverWorker
     from .growth import GrowthWorker
     from .inbox import InboxWorker
+    from .live import AdsLiveWorker, AnalyticsWorker, BillingWorker
     from .measure import MeasureWorker
     from .monitor import MonitorWorker
     from .outreach import OutreachWorker
     from .seo import SeoWorker
 
-    workers: list[Worker] = [DiscoverWorker(), OutreachWorker(), InboxWorker(), SeoWorker(), AdsAuditWorker(), ContentWorker(), MonitorWorker(), MeasureWorker(), GrowthWorker()]
+    workers: list[Worker] = [DiscoverWorker(), OutreachWorker(), InboxWorker(), SeoWorker(), AdsAuditWorker(), ContentWorker(), MonitorWorker(),
+                             MeasureWorker(), GrowthWorker(), BillingWorker(), AnalyticsWorker(), AdsLiveWorker()]
     return {w.name: w for w in workers}
 
 
@@ -70,9 +72,10 @@ def execute_action(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM |
     """Perform an approved action. Dispatch on the executor the creating worker recorded."""
     executor = (action.get("context") or {}).get("executor")
     from .content import execute_content
+    from .executors import EXECUTORS
     from .outreach import execute_send
 
-    table = {"send_email": execute_send, "run_skill": execute_content}
+    table = {"send_email": execute_send, "run_skill": execute_content, **EXECUTORS}
     fn = table.get(executor)
     if fn is None:
         return f"action {action['id']} has no automatic executor ({executor!r}); do it by hand and mark it executed."

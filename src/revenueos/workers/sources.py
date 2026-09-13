@@ -17,7 +17,7 @@ import httpx
 from ..qualify import FREEMAIL_DOMAINS, email_domain, website_host
 from .seo import parse_signals
 
-UA = "RevenueOS/0.1 (+https://unempyd.github.io/revenueos/; revenueos@icloud.com)"
+UA = "RevenueOS/0.2 (+https://unempyd.github.io/revenueos/)"
 OVERPASS = ("https://overpass-api.de/api/interpreter", "https://lz4.overpass-api.de/api/interpreter",
             "https://overpass.kumi.systems/api/interpreter")
 DEFAULT_KINDS = (

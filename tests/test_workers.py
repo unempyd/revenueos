@@ -28,7 +28,7 @@ ADS_CSV = """date,account_id,account_name,campaign_id,campaign_name,campaign_sta
 
 def test_worker_roster():
     names = set(all_workers())
-    assert names == {"discover", "outreach", "inbox", "seo", "ads-audit", "content", "monitor", "measure", "growth"}
+    assert names == {"discover", "outreach", "inbox", "seo", "ads-audit", "content", "monitor", "measure", "growth", "billing", "analytics", "ads-live"}
 
 
 def test_discover_from_csv_drop(workspace, store, onboarded):

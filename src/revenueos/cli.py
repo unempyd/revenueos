@@ -258,21 +258,95 @@ def cmd_orchestrator(args: argparse.Namespace) -> int:
 def cmd_workspace(args: argparse.Namespace) -> int:
     """Create a fresh customer workspace that shares this install's catalogue (skills, tools,
     orchestrator) but has its own canon, config, database and logs."""
-    src = Workspace.locate()
-    dest = Path(args.dir).expanduser().resolve()
-    if (dest / "company-context").exists():
-        print(f"{dest} already looks like a workspace", file=sys.stderr)
+    from .paths import new_workspace
+
+    try:
+        dest = new_workspace(Path(args.dir), Workspace.locate().root)
+    except FileExistsError as e:
+        print(e, file=sys.stderr)
         return 2
-    dest.mkdir(parents=True, exist_ok=True)
-    for name in ("company-context", "learning-loop"):
-        shutil.copytree(src.root / name, dest / name)
-    shutil.copy2(src.root / "VENDOR.json", dest / "VENDOR.json")
-    (dest / "data").mkdir(exist_ok=True)
-    shutil.copy2(src.automations, dest / "data" / "automations.json")
-    for name in ("skills", "agents", "tools", "methodology", "playbooks", "website", "orchestrator"):
-        if (src.root / name).exists():
-            os.symlink(src.root / name, dest / name)
     print(f"workspace ready: {dest}\n  revenueos --root {dest} init   (or REVENUEOS_ROOT={dest})")
+    return 0
+
+
+def cmd_connections(args: argparse.Namespace) -> int:
+    from .connections import ConnectionStore, describe_all
+
+    ws, _store, _ctx = _boot(args)
+    cs = ConnectionStore(ws)
+    rows = describe_all(cs)
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    print(f"CONNECTIONS — {ws.root}  (secrets {'sealed' if cs.sealed() else 'plain, file mode 600; set REVENUEOS_TOKEN_KEY to seal'})")
+    for r in rows:
+        state = f"connected as {r['account']}" + (" · changes allowed" if r["allow_write"] else " · read-only") if r["connected"] else "not connected"
+        print(f"  {r['name']:<13} {r['label']:<48} {state}")
+        if not r["connected"]:
+            print(f"  {'':<13} how: {r['how']}" + (f"   missing: {'; '.join(r['missing'])}" if r["missing"] else ""))
+    return 0
+
+
+def cmd_connect(args: argparse.Namespace) -> int:
+    from .connections import ConnectionStore, github_site, google, meta, stripe_conn, wordpress
+
+    ws, _store, _ctx = _boot(args)
+    cs = ConnectionStore(ws)
+    name = args.provider
+    try:
+        if name == "stripe":
+            conn = stripe_conn.connect(cs, args.key)
+        elif name == "github_site":
+            if not args.repo:
+                print("--repo owner/name is required", file=sys.stderr)
+                return 2
+            conn = github_site.connect(cs, args.repo, args.path or "", args.branch or "main", (_ctx.config.get("sender") or {}).get("email"))
+        elif name == "wordpress":
+            if not (args.site and args.user and args.app_password):
+                print("--site, --user and --app-password are required", file=sys.stderr)
+                return 2
+            conn = wordpress.connect(cs, args.site, args.user, args.app_password)
+        elif name == "google":
+            conn = google.connect(cs, args.scopes.split(",") if args.scopes else None)
+        elif name == "meta":
+            conn = meta.connect(cs, args.scopes.split(",") if args.scopes else None)
+        else:
+            print(f"unknown provider {name!r}", file=sys.stderr)
+            return 2
+    except Exception as exc:
+        print(f"not connected: {exc}", file=sys.stderr)
+        return 1
+    if args.allow_changes:
+        cs.set_allow_write(name, True)
+    print(f"connected {name} as {conn.account} · scopes {', '.join(conn.scopes)} · changes {'allowed' if args.allow_changes else 'not allowed (read-only until you turn it on)'}")
+    return 0
+
+
+def cmd_disconnect(args: argparse.Namespace) -> int:
+    from .connections import ConnectionStore
+
+    ws, _store, _ctx = _boot(args)
+    print("disconnected" if ConnectionStore(ws).remove(args.provider) else "was not connected")
+    return 0
+
+
+def cmd_accounts(args: argparse.Namespace) -> int:
+    from .tenants import Accounts
+
+    host = Path(args.root).expanduser().resolve() if args.root else Workspace.locate().root
+    acc = Accounts(host)
+    if args.verb == "add":
+        try:
+            rec = acc.add(args.email, args.password, template=host)
+        except (ValueError, FileExistsError) as e:
+            print(e, file=sys.stderr)
+            return 2
+        print(f"account {rec['email']} → workspace {rec['workspace']}")
+        return 0
+    for r in acc.list():
+        print(f"  {r['email']:<36} {r['role']:<6} {r['workspace']}")
+    if not acc.list():
+        print("no accounts (single-tenant mode); add one: revenueos accounts add <email> <password>")
     return 0
 
 
@@ -342,6 +416,29 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("dir")
     s.set_defaults(fn=cmd_workspace)
 
+    s = sub.add_parser("connections", help="what is connected and what each connection may do")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_connections)
+    s = sub.add_parser("connect", help="connect an account: stripe | google | meta | github_site | wordpress")
+    s.add_argument("provider")
+    s.add_argument("--key", help="stripe: secret or restricted key")
+    s.add_argument("--repo", help="github_site: owner/name")
+    s.add_argument("--path", help="github_site: site directory inside the repo")
+    s.add_argument("--branch", help="github_site: branch (main)")
+    s.add_argument("--site", help="wordpress: site url")
+    s.add_argument("--user", help="wordpress: user")
+    s.add_argument("--app-password", help="wordpress: application password")
+    s.add_argument("--scopes", help="google/meta: comma-separated scope names")
+    s.add_argument("--allow-changes", action="store_true", help="let executors change things through this connection")
+    s.set_defaults(fn=cmd_connect)
+    s = sub.add_parser("disconnect", help="remove a connection and its tokens")
+    s.add_argument("provider")
+    s.set_defaults(fn=cmd_disconnect)
+    s = sub.add_parser("accounts", help="hosted mode: customer accounts, one workspace each")
+    s.add_argument("verb", choices=["add", "list"])
+    s.add_argument("email", nargs="?")
+    s.add_argument("password", nargs="?")
+    s.set_defaults(fn=cmd_accounts)
     s = sub.add_parser("correct", help="record a permanent correction")
     s.add_argument("title")
     s.add_argument("--context", required=True)

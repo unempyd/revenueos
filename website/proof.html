@@ -83,7 +83,7 @@
 <header class="topnav">
   <div class="wrap row">
     <div class="brand"><span class="dot"></span>RevenueOS</div>
-    <nav class="links">
+    <nav class="links" id="sitenav">
       <a href="index.html#loop">How it works</a>
       <a href="index.html#evidence">Evidence</a>
       <a href="pricing.html">Pricing</a>
@@ -91,6 +91,7 @@
       <a href="index.html#inside">Built in the open</a>
       <a href="proof.html" class="on">Proof</a>
     </nav>
+    <button class="navbtn" aria-expanded="false" aria-label="Open menu" aria-controls="sitenav"><span></span><span></span><span></span></button>
   </div>
 </header>
 
@@ -266,5 +267,287 @@ revenueos --root /tmp/ros-demo run measure &amp;&amp; revenueos --root /tmp/ros-
   </div>
 </footer>
 
+<div class="navscrim" aria-hidden="true"></div>
+<style>
+/* ═══ RevenueOS motion + mobile nav layer ═══════════════════════════════
+   Apple fluid-interface rules on top of the existing sheet. Loaded last so
+   it wins. Compositor-only properties (transform/opacity) throughout.      */
+:root{
+  --ease-out:cubic-bezier(.32,.72,0,1);      /* iOS sheet curve */
+  --ease-soft:cubic-bezier(.4,0,.2,1);
+  --t-fast:140ms; --t-base:280ms; --t-slow:520ms;
+  --nav-h:60px;
+}
+
+/* ── 1. Response: feedback on press, not release ───────────────────── */
+.cta-btn,.links a,.price-card,button{
+  transition:transform var(--t-fast) var(--ease-out),
+             background-color var(--t-fast) var(--ease-out),
+             border-color var(--t-fast) var(--ease-out),
+             color var(--t-fast) var(--ease-out),
+             opacity var(--t-fast) var(--ease-out);
+}
+.cta-btn:active,button:active{transform:scale(.97)}
+.links a:active{opacity:.6}
+.cta-btn{will-change:transform}
+
+/* ── 2. Scroll-edge effect on the chrome, not a hard divider ───────── */
+.topnav{
+  border-bottom:1px solid transparent;
+  transition:border-color var(--t-base) var(--ease-soft),
+             background-color var(--t-base) var(--ease-soft);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);
+  backdrop-filter:saturate(180%) blur(20px);
+  padding-top:env(safe-area-inset-top);
+}
+.topnav.is-scrolled{border-bottom-color:var(--border);background:rgba(250,250,249,.82)}
+
+/* ── 3. Section reveals — enter along one path, settle, never bounce ─ */
+.reveal{opacity:0;transform:translate3d(0,22px,0)}
+.reveal.in{
+  opacity:1;transform:none;
+  transition:opacity var(--t-slow) var(--ease-out),transform var(--t-slow) var(--ease-out);
+}
+.reveal.in>*{animation:none}
+/* children stagger — small offsets only, so nothing is ever hidden long */
+.stagger.in>*{animation:riseIn var(--t-slow) var(--ease-out) both}
+.stagger.in>*:nth-child(1){animation-delay:0ms}
+.stagger.in>*:nth-child(2){animation-delay:60ms}
+.stagger.in>*:nth-child(3){animation-delay:120ms}
+.stagger.in>*:nth-child(4){animation-delay:180ms}
+.stagger.in>*:nth-child(5){animation-delay:240ms}
+.stagger.in>*:nth-child(n+6){animation-delay:300ms}
+@keyframes riseIn{from{opacity:0;transform:translate3d(0,18px,0)}to{opacity:1;transform:none}}
+
+/* ── 4. Parallax: pure CSS scroll-timeline, zero JS, zero jank ─────── */
+@supports (animation-timeline:view()){
+  @media (prefers-reduced-motion:no-preference){
+    .hero .eyebrow,.hero h1,.hero p,.hero-ctas{
+      animation:heroFloat linear both;
+      animation-timeline:view();
+      animation-range:exit -10% exit 90%;
+    }
+    @keyframes heroFloat{to{opacity:.25;transform:translate3d(0,-40px,0)}}
+    .evidence-shots img,.brief-box{
+      animation:driftIn linear both;
+      animation-timeline:view();
+      animation-range:entry 0% entry 70%;
+    }
+    @keyframes driftIn{from{opacity:0;transform:translate3d(0,40px,0) scale(.985)}to{opacity:1;transform:none}}
+  }
+}
+
+/* ── 5. Mobile navigation — a real sheet, not a wrapping row ───────── */
+.navbtn{
+  display:none;position:relative;width:44px;height:44px;margin-left:auto;
+  border:0;background:transparent;cursor:pointer;border-radius:12px;
+  -webkit-tap-highlight-color:transparent;
+}
+.navbtn span{
+  position:absolute;left:11px;width:22px;height:1.5px;background:var(--ink);border-radius:2px;
+  transition:transform var(--t-base) var(--ease-out),opacity var(--t-fast) var(--ease-out);
+}
+.navbtn span:nth-child(1){top:16px}
+.navbtn span:nth-child(2){top:22px}
+.navbtn span:nth-child(3){top:28px}
+.navbtn[aria-expanded="true"] span:nth-child(1){transform:translateY(6px) rotate(45deg)}
+.navbtn[aria-expanded="true"] span:nth-child(2){opacity:0;transform:scaleX(.3)}
+.navbtn[aria-expanded="true"] span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
+
+.navscrim{
+  position:fixed;inset:0;z-index:29;background:rgba(15,23,42,.32);
+  opacity:0;pointer-events:none;
+  transition:opacity var(--t-base) var(--ease-out);
+  -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+}
+body.nav-open .navscrim{opacity:1;pointer-events:auto}
+
+@media (max-width:860px){
+  .navbtn{display:block}
+  .nav-cta{display:none}
+  .topnav .row{align-items:center}
+  nav.links{display:none}
+}
+/* The sheet lives at body level: .topnav has backdrop-filter, which would
+   otherwise become the containing block for any fixed-position descendant. */
+.navsheet{
+  position:fixed;top:0;right:0;bottom:0;z-index:30;
+  width:min(84vw,320px);
+  display:flex;flex-direction:column;align-items:stretch;gap:2px;
+  margin:0;padding:calc(env(safe-area-inset-top) + 76px) 20px calc(env(safe-area-inset-bottom) + 28px);
+  background:var(--panel);border-left:1px solid var(--border);
+  transform:translate3d(100%,0,0);
+  transition:transform var(--t-base) var(--ease-out);
+  overflow-y:auto;overscroll-behavior:contain;visibility:hidden;
+}
+body.nav-open .navsheet{transform:none;visibility:visible}
+.navsheet a{
+  font-size:17px;font-weight:500;letter-spacing:-.022em;color:var(--ink);
+  text-decoration:none;padding:13px 14px;border-radius:12px;
+  min-height:44px;display:flex;align-items:center;
+}
+.navsheet a:active{background:var(--accent-soft)}
+.navsheet a.cta-btn{color:var(--accent-ink);justify-content:center;margin-top:12px}
+.navsheet a.cta-btn:active{background:var(--accent)}
+/* chrome floats above the sheet so the close control stays reachable */
+body.nav-open .topnav{z-index:31}
+.navbtn{z-index:32}
+body.nav-open{overflow:hidden}
+@media (min-width:861px){
+  .navsheet{display:none}
+}
+@media (max-width:860px) and (prefers-reduced-motion:reduce){
+  .navsheet{transition:none}
+}
+@media (min-width:861px){
+  .navscrim{display:none}
+}
+
+/* ── 6. Never cut a page off ───────────────────────────────────────── */
+/* Grid items default to min-width:auto, so unbreakable content (a long URL,
+   a code span) pushes the track wider than its share and the page overflows.
+   minmax(0,1fr) lets tracks actually shrink to their allotted fraction.     */
+.price-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.loop{grid-template-columns:repeat(5,minmax(0,1fr))}
+.brief-grid{grid-template-columns:1.1fr minmax(0,.9fr)}
+.price-card,.loop-step,.brief-box{min-width:0}
+/* tracks can now shrink, so long button labels must wrap instead of spilling */
+.price-card .cta-btn{
+  white-space:normal;text-align:center;line-height:1.3;
+  height:auto;min-height:44px;padding:11px 14px;hyphens:auto;
+}
+.price-card *,.loop-step *,.brief-box *{min-width:0;overflow-wrap:anywhere}
+@media (max-width:980px){.price-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:900px){.loop{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:820px){.brief-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:620px){.loop{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.price-grid{grid-template-columns:minmax(0,1fr)}}
+
+html{scroll-behavior:smooth;scroll-padding-top:calc(var(--nav-h) + 12px)}
+html,body{overflow-x:clip}
+/* the closed sheet is parked at translateX(100%), i.e. just past the right
+   edge — clip at the root so it never contributes scrollable width */
+img,svg,video{max-width:100%;height:auto}
+pre,table{max-width:100%;overflow-x:auto;min-width:0}
+/* a flex/grid child defaults to min-width:auto and refuses to shrink below
+   its content, so a wide <pre> pushes the whole page instead of scrolling */
+.wrap>*,section>*,.panel>*,.brief-box>*{min-width:0}
+pre{overscroll-behavior-x:contain}
+section{scroll-margin-top:calc(var(--nav-h) + 12px)}
+@media (max-width:600px){
+  body{padding-bottom:env(safe-area-inset-bottom)}
+  h1{overflow-wrap:break-word}
+  .hero-ctas{flex-wrap:wrap}
+  .hero-ctas .cta-btn{flex:1 1 auto;justify-content:center;text-align:center}
+}
+
+/* ── 7. Accessibility: three independent signals ───────────────────── */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{
+    animation-duration:.01ms!important;animation-delay:0ms!important;
+    transition-duration:.01ms!important;
+  }
+  .reveal{opacity:1;transform:none}
+  .cta-btn:active,button:active{transform:none}
+  .links{transition:none}
+}
+@media (prefers-reduced-transparency:reduce){
+  .topnav{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--bg)}
+  .navscrim{-webkit-backdrop-filter:none;backdrop-filter:none;background:rgba(15,23,42,.5)}
+}
+@media (prefers-contrast:more){
+  .topnav.is-scrolled{border-bottom-color:var(--ink)}
+  .links a{color:var(--ink)}
+}
+:where(a,button,.cta-btn):focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+</style>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var nav = document.querySelector(".topnav");
+  var btn = document.querySelector(".navbtn");
+  var links = document.querySelector(".links");
+  var scrim = document.querySelector(".navscrim");
+
+  /* chrome gains its edge only once content is actually beneath it */
+  if (nav){
+    var onScroll = function(){ nav.classList.toggle("is-scrolled", window.scrollY > 8); };
+    addEventListener("scroll", onScroll, {passive:true}); onScroll();
+  }
+
+  /* Build the sheet at body level — see the CSS note about backdrop-filter. */
+  var sheet = null;
+  if (links && !document.querySelector(".navsheet")) {
+    sheet = document.createElement("nav");
+    sheet.className = "navsheet";
+    sheet.id = "navsheet";
+    sheet.setAttribute("aria-label", "Site menu");
+    links.querySelectorAll("a").forEach(function(a){
+      var c = a.cloneNode(true); c.removeAttribute("id"); sheet.appendChild(c);
+    });
+    var cta = document.querySelector(".nav-cta");
+    if (cta) { var cc = cta.cloneNode(true); cc.className = "cta-btn small"; sheet.appendChild(cc); }
+    document.body.appendChild(sheet);
+    if (btn) btn.setAttribute("aria-controls", "navsheet");
+  } else {
+    sheet = document.querySelector(".navsheet");
+  }
+
+  /* ── mobile sheet ── */
+  function setOpen(open){
+    if(!btn) return;
+    document.body.classList.toggle("nav-open", open);
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    btn.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    if(open){ var f = sheet && sheet.querySelector("a"); if(f) f.focus({preventScroll:true}); }
+    else { btn.focus({preventScroll:true}); }
+  }
+  if(btn){
+    btn.addEventListener("click", function(){
+      setOpen(!document.body.classList.contains("nav-open"));
+    });
+  }
+  if(scrim) scrim.addEventListener("click", function(){ setOpen(false); });
+  addEventListener("keydown", function(e){
+    if(e.key === "Escape" && document.body.classList.contains("nav-open")) setOpen(false);
+  });
+  /* tapping a link closes the sheet, then the anchor scroll happens */
+  if(sheet) sheet.addEventListener("click", function(e){
+    if(e.target.closest("a")) setOpen(false);
+  });
+  /* returning to desktop must never leave the body scroll-locked */
+  matchMedia("(min-width: 861px)").addEventListener("change", function(e){
+    if(e.matches) setOpen(false);
+  });
+
+  /* ── reveals: mark sections, observe once, then stop paying for them ── */
+  var targets = document.querySelectorAll("section, .brief-box, .price-card, .loop-step");
+  if(reduce || !("IntersectionObserver" in window)){
+    targets.forEach(function(el){ el.classList.add("reveal","in"); });
+    return;
+  }
+  targets.forEach(function(el){
+    el.classList.add("reveal");
+    if(el.classList.contains("loop") || el.querySelector(".loop-step")) el.classList.add("stagger");
+  });
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(en.isIntersecting){ en.target.classList.add("in"); io.unobserve(en.target); }
+    });
+  }, {rootMargin:"0px 0px -8% 0px", threshold:0.06});
+  targets.forEach(function(el){ io.observe(el); });
+
+  /* anything still hidden after 2s is a bug — never leave content invisible */
+  setTimeout(function(){
+    document.querySelectorAll(".reveal:not(.in)").forEach(function(el){
+      var r = el.getBoundingClientRect();
+      if(r.top < innerHeight) el.classList.add("in");
+    });
+  }, 2000);
+})();
+</script>
 </body>
 </html>

@@ -301,6 +301,14 @@ class Store:
             c.execute("INSERT INTO lead_events (at, lead_id, kind, payload) VALUES (?,?,?,?)", (now(), lead_id, "created", None))
             return lead_id
 
+    def upsert_lead_fields(self, lead_id: str, **fields: Any) -> None:
+        cols = {k: v for k, v in fields.items() if v is not None}
+        if not cols:
+            return
+        with self._conn() as c:
+            sets = ", ".join(f"{k}=?" for k in cols)
+            c.execute(f"UPDATE leads SET {sets}, updated_at=? WHERE id=?", (*cols.values(), now(), lead_id))
+
     def get_lead(self, lead_id: str) -> dict[str, Any] | None:
         with self._conn() as c:
             row = c.execute("SELECT * FROM leads WHERE id=?", (lead_id,)).fetchone()
@@ -463,7 +471,9 @@ class Store:
 
     def results_summary(self) -> dict[str, Any]:
         with self._conn() as c:
-            found = c.execute("SELECT COUNT(*) n FROM actions").fetchone()["n"]
+            # withdrawn/superseded rows (dedupe_key suffixed by the gate or a redraft) were never findings for the customer
+            found = c.execute("SELECT COUNT(*) n FROM actions WHERE dedupe_key IS NULL OR "
+                              "(dedupe_key NOT LIKE '%:withdrawn-%' AND dedupe_key NOT LIKE '%:superseded-%')").fetchone()["n"]
             executed = c.execute("SELECT COUNT(*) n FROM actions WHERE status='executed'").fetchone()["n"]
             measured = c.execute(
                 "SELECT COUNT(DISTINCT action_id) n FROM outcomes WHERE status='measured'").fetchone()["n"]

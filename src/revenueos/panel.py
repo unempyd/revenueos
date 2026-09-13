@@ -21,10 +21,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
 from . import __version__
+from .connections import ConnectionStore, describe_all, oauth
 from .context import QUESTIONS, BusinessContext
 from .llm import maybe_llm
 from .paths import Workspace
 from .store import Store
+from .tenants import Accounts, make_session, read_session
 from .today import build_brief
 from .workers import execute_action, run_worker
 
@@ -40,7 +42,8 @@ STYLE = """
   --bg:#ffffff; --surface:#ffffff; --surface-2:#f5f5f7; --canvas:#f5f5f7;
   --ink:#1d1d1f; --ink-2:#6e6e73; --ink-3:#86868b;
   --line:#d2d2d7; --line-soft:#e8e8ed;
-  --accent:#0066cc; --accent-ink:#ffffff;
+  --accent:#0071e3; --accent-ink:#ffffff;
+  --orange:#f56900;
   --ok:#00845a; --pend:#8a6d00;
   --chrome:rgba(255,255,255,.72);
   --r-card:28px; --r-btn:36px; --r-pill:980px; --r-field:10px;
@@ -53,6 +56,7 @@ STYLE = """
   --ink:#f5f5f7; --ink-2:#a1a1a6; --ink-3:#86868b;
   --line:#424245; --line-soft:#2c2c2e;
   --accent:#2997ff; --accent-ink:#000000;
+  --orange:#ff8f3f;
   --ok:#30d158; --pend:#ffd60a;
   --chrome:rgba(29,29,31,.72);
 }}
@@ -122,7 +126,7 @@ h2{margin:var(--sp-10) 0 var(--sp-3);font-size:21px;font-weight:600;line-height:
 .t{flex:1 1 min(100%,22rem); min-width:0}
 .t b{display:block;font-size:17px;font-weight:600;line-height:1.29;letter-spacing:-.022em;margin:2px 0 4px}
 .t small{display:block;color:var(--ink-3);font-size:14px;line-height:1.5;letter-spacing:-.016em;white-space:pre-wrap}
-.type{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+.type{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--orange)}
 
 /* ── controls: feedback on press, not release ── */
 form{display:inline-flex;margin:0 var(--sp-2) var(--sp-2) 0}
@@ -202,7 +206,7 @@ input:focus,textarea:focus{border-color:var(--accent);outline:none}
 
 PAGE = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevenueOS — {title}</title>
 <style>{style}</style>
-<nav><a href="/">TODAY</a><a href="/results">RESULTS</a><a href="/onboard">Business</a><a href="/site/">Site</a>{nav_extra}</nav>
+<nav><a href="/">TODAY</a><a href="/results">RESULTS</a><a href="/connections">Connections</a><a href="/spend">Spend</a><a href="/onboard">Business</a><a href="/site/">Site</a>{nav_extra}</nav>
 <h1>{title}</h1><div class="sub">{sub}</div>
 {msg}
 {body}
@@ -219,6 +223,12 @@ ROW_APPROVED = """<div class="row"><div class="t"><span class="type">{atype} · 
 
 LOGIN = """<form method="post" action="/login"><label>Panel password</label><input type="password" name="password" autofocus>
 <p><button class="x">Sign in</button></p></form>"""
+LOGIN_ACCOUNTS = """<form method="post" action="/login"><label>Email</label><input type="email" name="email" autofocus>
+<label>Password</label><input type="password" name="password"><p><button class="x">Sign in</button></p></form>"""
+
+_OAUTH_STATES: dict[str, dict[str, str]] = {}
+
+CONN_ROW = """<div class="row"><div class="t"><span class="type">{state}</span><b>{label}</b><small>Reads: {reads}<br>Changes: {writes}<br>Needs: {needs}</small>{missing}</div>{forms}</div>"""
 
 
 def _session_secret() -> bytes:
@@ -239,14 +249,55 @@ def token_ok(token: str | None) -> bool:
     return hmac.compare_digest(good, sig) and exp.isdigit() and int(exp) > time.time()
 
 
-def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password: str | None):
-    website_dir = ws.root / "website"
+def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, password: str | None, accounts: Accounts | None = None):
+    multi = accounts is not None and accounts.enabled()
 
     class Handler(BaseHTTPRequestHandler):
         server_version = f"RevenueOS/{__version__}"
 
         def log_message(self, fmt, *args):  # quiet
             pass
+
+        # ── tenant binding: every request resolves to one workspace ──
+        def _cookie(self, name: str) -> str | None:
+            cookie = self.headers.get("Cookie", "")
+            return next((c.split("=", 1)[1].strip() for c in cookie.split(";") if c.strip().startswith(name + "=")), None)
+
+        def _tenant(self):
+            cached = getattr(self, "_tenant_cache", None)
+            if cached is not None:
+                return cached or None
+            if multi:
+                email = read_session(self._cookie("rs"), _session_secret())
+                tws = accounts.workspace_for(email) if email else None
+                self._tenant_cache = (tws, Store(tws.db), BusinessContext.load(tws), email) if tws else ()
+            else:
+                self._tenant_cache = (ws0, store0, ctx0, None)
+            return self._tenant_cache or None
+
+        @property
+        def ws(self) -> Workspace:
+            t = self._tenant()
+            return t[0] if t else ws0
+
+        @property
+        def store(self) -> Store:
+            t = self._tenant()
+            return t[1] if t else store0
+
+        @property
+        def ctx(self) -> BusinessContext:
+            t = self._tenant()
+            return t[2] if t else ctx0
+
+        @property
+        def account_email(self) -> str | None:
+            t = self._tenant()
+            return t[3] if t else None
+
+        @property
+        def website_dir(self):
+            return self.ws.root / "website"
 
         # ── plumbing ──
         def _send(self, body: str | bytes, status: int = 200, ctype: str = "text/html; charset=utf-8", extra: dict[str, str] | None = None) -> None:
@@ -270,18 +321,22 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
             lic = ""
             if load_license is not None:
                 try:
-                    lic = f'<span class="none">licence: {load_license(ws).tier.value}</span>'
+                    lic = f'<span class="none">licence: {load_license(self.ws).tier.value}</span>'
                 except Exception:
                     lic = ""
             return PAGE.format(title=html.escape(title), sub=html.escape(sub), body=body, style=STYLE, nav_extra=lic,
                                msg=f'<div class="msg">{html.escape(msg)}</div>' if msg else "")
 
         def _authed(self) -> bool:
+            if multi:
+                return self._tenant() is not None
             if not password:
                 return True
-            cookie = self.headers.get("Cookie", "")
-            token = next((c.split("=", 1)[1] for c in cookie.split(";") if c.strip().startswith("rs=")), None)
-            return token_ok(token.strip() if token else None)
+            token = self._cookie("rs")
+            return token_ok(token)
+
+        def _login_page(self, sub: str, status: int = 401) -> None:
+            self._send(self._page("Sign in", sub, LOGIN_ACCOUNTS if multi else LOGIN), status)
 
         def _body(self) -> bytes:
             n = int(self.headers.get("Content-Length") or 0)
@@ -292,7 +347,7 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
             url = urlparse(self.path)
             path = url.path
             if path == "/health":
-                self._send(json.dumps({"ok": True, "service": "revenueos-panel", "version": __version__, "onboarded": ctx.is_onboarded()}),
+                self._send(json.dumps({"ok": True, "service": "revenueos-panel", "version": __version__, "onboarded": self.ctx.is_onboarded()}),
                            ctype="application/json")
                 return
             if path.startswith("/site/") or path == "/site":
@@ -302,7 +357,7 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
                 self._static(path[1:])
                 return
             if billing_http is not None and path.startswith("/billing/"):
-                res = billing_http(self.path, "GET", b"", dict(self.headers), ws)
+                res = billing_http(self.path, "GET", b"", dict(self.headers), self.ws)
                 if res:
                     status, ctype, body = res
                     if status in (301, 302, 303):
@@ -310,27 +365,36 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
                     else:
                         self._send(body, status, ctype)
                     return
+            if path.startswith("/connections/") and path.endswith("/callback"):
+                self._oauth_callback(path.split("/")[2], parse_qs(url.query))
+                return
             if not self._authed():
-                self._send(self._page("Sign in", "RevenueOS control panel", LOGIN), 401)
+                self._login_page("RevenueOS control panel")
                 return
             msg = parse_qs(url.query).get("msg", [""])[0]
             if path == "/api/today":
-                b = build_brief(store)
+                b = build_brief(self.store)
                 self._send(json.dumps({"counts": b.counts, "funnel": b.funnel, "pipeline_value": b.pipeline_value, "actions": b.actions, "approved": b.approved,
                                        "results": b.results, "summary": b.summary}, default=str), ctype="application/json")
             elif path == "/results":
-                self._send(self._page("RESULTS", f"{ctx.company_name} — what RevenueOS did and what happened", self._results_html(), msg))
+                self._send(self._page("RESULTS", f"{self.ctx.company_name} — what RevenueOS did and what happened", self._results_html(), msg))
             elif path == "/onboard":
                 self._send(self._page("Connect your business", "One questionnaire. Blank answers keep the current text.", self._onboard_form(), msg))
+            elif path == "/connections":
+                self._send(self._page("Connections", "Accounts you authorise once. Read-only until you allow changes.", self._connections_html(), msg))
+            elif path == "/spend":
+                self._send(self._page("Spend", "Real numbers from the connected accounts", self._spend_html(), msg))
+            elif path == "/api/connections":
+                self._send(json.dumps(describe_all(ConnectionStore(self.ws)), default=str), ctype="application/json")
             elif path == "/":
-                self._send(self._page("TODAY", ctx.company_name if ctx.is_onboarded() else "Not connected yet — open Business",
+                self._send(self._page("TODAY", self.ctx.company_name if self.ctx.is_onboarded() else "Not connected yet — open Business",
                                       self._today_html(), msg))
             else:
                 self._send("not found", 404)
 
         def _static(self, rel: str) -> None:
-            base = website_dir.resolve()
-            target = (website_dir / rel).resolve()
+            base = self.website_dir.resolve()
+            target = (self.website_dir / rel).resolve()
             if not base.is_dir() or (target != base and base not in target.parents):
                 self._send("not found", 404)
                 return
@@ -343,7 +407,7 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
             self._send(target.read_bytes(), 200, ctype)
 
         def _today_html(self) -> str:
-            b = build_brief(store)
+            b = build_brief(self.store)
             rows = "".join(
                 ROW.format(
                     id=a["id"], atype=html.escape(a["action_type"].replace("_", " ")), title=html.escape(a["title"]),
@@ -371,7 +435,7 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
                     + approved_html)
 
         def _results_html(self) -> str:
-            b = build_brief(store)
+            b = build_brief(self.store)
             s = b.summary
             head = (f"<div class='brief'>{s.get('found', 0)} opportunities found · {s.get('executed', 0)} executed · {s.get('measured', 0)} measured\n"
                     f"{s.get('emails_sent', 0)} emails sent · {s.get('replies', 0)} replies · {s.get('bounces', 0)} bounces · {s.get('booked', 0)} booked\n"
@@ -394,14 +458,131 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
                      + "".join(rows) + "</table>") if rows else "<p>No executed actions yet.</p>"
             return head + "<h2>Every executed action</h2>" + table
 
+        def _connections_html(self) -> str:
+            cs = ConnectionStore(self.ws)
+            rows = []
+            for d in describe_all(cs):
+                name = d["name"]
+                if d["connected"]:
+                    state = f"connected · {html.escape(str(d['account']))} · {'changes allowed' if d['allow_write'] else 'read-only'}"
+                    toggle = ("off" if d["allow_write"] else "on")
+                    forms = (f'<form method="post" action="/connections/{name}/write"><input type="hidden" name="allow" value="{toggle}">'
+                             f'<button class="{"" if d["allow_write"] else "x"}">{"Make read-only" if d["allow_write"] else "Allow changes"}</button></form>'
+                             f'<form method="post" action="/connections/{name}/disconnect"><button>Disconnect</button></form>')
+                else:
+                    state = "not connected"
+                    forms = self._connect_form(name, d)
+                missing = f"<small>Missing: {html.escape('; '.join(d['missing']))}</small>" if d["missing"] and not d["connected"] else ""
+                rows.append(CONN_ROW.format(state=state, label=html.escape(d["label"]), reads=html.escape(d["reads"]), writes=html.escape(d["writes"]),
+                                            needs=html.escape(d["needs"]), missing=missing, forms=forms))
+            sealed = "sealed with REVENUEOS_TOKEN_KEY" if cs.sealed() else "stored in data/connections.json (mode 600); set REVENUEOS_TOKEN_KEY to seal them"
+            return (f"<p class='sub'>Tokens are {sealed}. A connection is read-only until you allow changes; every change still waits for your approval on TODAY.</p>"
+                    + "".join(rows))
+
+        def _connect_form(self, name: str, d: dict) -> str:
+            a = f'/connections/{name}'
+            if name == "stripe":
+                return f'<form method="post" action="{a}"><input name="key" placeholder="sk_live_… or rk_…" required><button class="x">Connect</button></form>'
+            if name == "github_site":
+                return (f'<form method="post" action="{a}"><input name="repo" placeholder="owner/name" required><input name="path" placeholder="site dir (optional)">'
+                        f'<input name="branch" placeholder="main"><button class="x">Connect</button></form>')
+            if name == "wordpress":
+                return (f'<form method="post" action="{a}"><input name="site" placeholder="https://example.com" required><input name="user" placeholder="user" required>'
+                        f'<input name="app_password" placeholder="application password" required><button class="x">Connect</button></form>')
+            if name in ("google", "meta"):
+                ready = d.get("ready")
+                return (f'<form method="post" action="{a}"><button class="x" {"" if ready else "disabled"}>Connect {html.escape(d["label"].split(" (")[0])}</button></form>'
+                        + ("" if ready else "<small>set the OAuth client credentials first</small>"))
+            return "<small>connected automatically with the mailbox</small>"
+
+        def _connections_post(self, name: str, verb: str, form: dict) -> None:
+            from .connections import github_site, stripe_conn, wordpress
+
+            cs = ConnectionStore(self.ws)
+            f = {k: v[0].strip() for k, v in form.items() if v}
+            try:
+                if verb == "write":
+                    cs.set_allow_write(name, f.get("allow") == "on")
+                    msg = f"{name}: changes {'allowed' if f.get('allow') == 'on' else 'no longer allowed'}"
+                elif verb == "disconnect":
+                    cs.remove(name)
+                    msg = f"{name} disconnected"
+                elif name == "stripe":
+                    c = stripe_conn.connect(cs, f.get("key"))
+                    msg = f"Stripe connected as {c.account} ({c.meta.get('business') or ''})"
+                elif name == "github_site":
+                    c = github_site.connect(cs, f.get("repo", ""), f.get("path", ""), f.get("branch") or "main")
+                    msg = f"site repo connected: {c.account}"
+                elif name == "wordpress":
+                    c = wordpress.connect(cs, f.get("site", ""), f.get("user", ""), f.get("app_password", ""))
+                    msg = f"WordPress connected: {c.account}"
+                elif name in ("google", "meta"):
+                    self._oauth_start(name)
+                    return
+                else:
+                    msg = f"unknown provider {name}"
+            except Exception as exc:
+                msg = f"{name}: not connected — {exc}"
+            self._redirect("/connections?msg=" + quote(msg[:400]))
+
+        def _oauth_start(self, name: str) -> None:
+            import secrets as _secrets
+
+            host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "localhost"
+            scheme = self.headers.get("X-Forwarded-Proto") or ("https" if not host.startswith(("localhost", "127.")) else "http")
+            redirect_uri = f"{scheme}://{host}/connections/{name}/callback"
+            state = _secrets.token_urlsafe(16)
+            wanted = ["identity", "searchconsole.read", "analytics.read", "calendar.write"] if name == "google" else ["identity", "ads.read"]
+            verifier, challenge = oauth._pkce() if oauth.PROVIDERS[name].get("pkce", True) else (None, None)
+            _OAUTH_STATES[state] = {"provider": name, "verifier": verifier or "", "redirect_uri": redirect_uri, "ws": str(self.ws.root), "wanted": ",".join(wanted)}
+            self._redirect(oauth.authorize_url(name, redirect_uri, wanted, state, challenge))
+
+        def _oauth_callback(self, name: str, q: dict) -> None:
+            from .connections import google, meta
+
+            st = _OAUTH_STATES.pop((q.get("state") or [""])[0], None)
+            if not st or st["provider"] != name:
+                self._send("bad state", 400)
+                return
+            if "error" in q:
+                self._redirect("/connections?msg=" + quote(f"{name}: {q['error'][0]}"))
+                return
+            tws = Workspace(__import__("pathlib").Path(st["ws"]))
+            cs = ConnectionStore(tws)
+            try:
+                toks = oauth.exchange_code(name, q["code"][0], st["redirect_uri"], st["verifier"] or None)
+                c = (google if name == "google" else meta).connect(cs, st["wanted"].split(","), tokens=toks)
+                msg = f"{name} connected as {c.account}"
+            except Exception as exc:
+                msg = f"{name}: not connected — {exc}"
+            self._redirect("/connections?msg=" + quote(msg[:400]))
+
+        def _spend_html(self) -> str:
+            m = self.store.latest_metrics()
+            cs = ConnectionStore(self.ws)
+            lines = []
+            st = {k.removeprefix("stripe_"): v for k, v in m.items() if k.startswith("stripe_")}
+            if st:
+                lines.append("REVENUE (Stripe, last billing run)\n" + "\n".join(f"{k:<24} {v:g}" for k, v in sorted(st.items())))
+            else:
+                lines.append("REVENUE: Stripe not connected" if not cs.get("stripe") else "REVENUE: run the billing check")
+            ads = {k: v for k, v in m.items() if k.endswith("_spend_28d")}
+            lines.append(("AD SPEND (28 days)\n" + "\n".join(f"{k:<24} {v:g}" for k, v in sorted(ads.items()))) if ads else "AD SPEND: no ad account connected")
+            b = build_brief(self.store)
+            lines.append(f"PIPELINE  ${b.pipeline_value:,.0f} (deal values on open leads)")
+            run = ('<form method="post" action="/run/billing"><button>Read Stripe now</button></form> '
+                   '<form method="post" action="/run/ads-live"><button>Read ad accounts now</button></form> '
+                   '<form method="post" action="/run/analytics"><button>Read Search Console / GA4 now</button></form>')
+            return f'<div class="brief">{html.escape(chr(10).join(lines))}</div>{run}'
+
         def _onboard_form(self) -> str:
-            cur = {"company_name": ctx.company_name if ctx.is_onboarded() else "", "website": ctx.website or "",
-                   "competitors": ", ".join(ctx.competitors), "channels": ", ".join(ctx.channels),
-                   "sender_name": (ctx.config.get("sender") or {}).get("name", ""), "sender_email": (ctx.config.get("sender") or {}).get("email", ""),
-                   "booking_url": ctx.config.get("booking_url") or ""}
+            cur = {"company_name": self.ctx.company_name if self.ctx.is_onboarded() else "", "website": self.ctx.website or "",
+                   "competitors": ", ".join(self.ctx.competitors), "channels": ", ".join(self.ctx.channels),
+                   "sender_name": (self.ctx.config.get("sender") or {}).get("name", ""), "sender_email": (self.ctx.config.get("sender") or {}).get("email", ""),
+                   "booking_url": self.ctx.config.get("booking_url") or ""}
             fields = []
             for key, prompt, target in QUESTIONS:
-                value = cur.get(key) or (ctx.section(*target) if target and ctx.is_onboarded() else "")
+                value = cur.get(key) or (self.ctx.section(*target) if target and self.ctx.is_onboarded() else "")
                 if target and value and value.split()[0] in ("Write", "State", "List", "Describe", "Name", "Include", "Define", "Explain", "Replace"):
                     value = ""
                 tag = "textarea" if target and key in ("pain_points", "differentiators", "primary_audience") else "input"
@@ -415,17 +596,26 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
             path = urlparse(self.path).path
             body = self._body()
             if billing_http is not None and path.startswith("/billing/"):
-                res = billing_http(self.path, "POST", body, dict(self.headers), ws)
+                res = billing_http(self.path, "POST", body, dict(self.headers), self.ws)
                 if res:
                     status, ctype, out = res
                     self._send(out, status, ctype)
                     return
             if path == "/login":
                 form = parse_qs(body.decode("utf-8", "replace"))
-                if password and hmac.compare_digest(form.get("password", [""])[0], password):
+                if multi:
+                    email = form.get("email", [""])[0]
+                    if accounts.verify(email, form.get("password", [""])[0]):
+                        self._redirect("/", {"Set-Cookie": f"rs={make_session(email.strip().lower(), _session_secret())}; HttpOnly; SameSite=Lax; Path=/"})
+                    else:
+                        self._login_page("Wrong email or password")
+                elif password and hmac.compare_digest(form.get("password", [""])[0], password):
                     self._redirect("/", {"Set-Cookie": f"rs={make_token()}; HttpOnly; SameSite=Lax; Path=/"})
                 else:
-                    self._send(self._page("Sign in", "Wrong password", LOGIN), 401)
+                    self._login_page("Wrong password")
+                return
+            if path == "/logout":
+                self._redirect("/", {"Set-Cookie": "rs=; Max-Age=0; Path=/"})
                 return
             if not self._authed():
                 self._send("unauthorized", 401)
@@ -435,15 +625,18 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
                 if not form:
                     self._redirect("/onboard?msg=" + quote("nothing to save"))
                     return
-                ctx.onboard(form)
-                errors = ctx.validate()
+                self.ctx.onboard(form)
+                errors = self.ctx.validate()
                 self._redirect("/?msg=" + quote(("Connected " + form.get("company_name", "")) if not errors else "Saved with validation errors: " + "; ".join(errors)[:300]))
                 return
             parts = path.strip("/").split("/")
+            if parts[0] == "connections" and len(parts) in (2, 3):
+                self._connections_post(parts[1], parts[2] if len(parts) == 3 else "connect", parse_qs(body.decode("utf-8", "replace")))
+                return
             if len(parts) == 2 and parts[0] == "run":
                 names = ["discover", "outreach", "inbox", "seo", "ads-audit", "content", "monitor", "measure"] if parts[1] == "all" else [parts[1]]
                 llm = maybe_llm()
-                results = [run_worker(n, ws, store, ctx, llm, "panel") for n in names]
+                results = [run_worker(n, self.ws, self.store, self.ctx, llm, "panel") for n in names]
                 new = sum(r.actions_created for r in results)
                 lines = [f"Ran {len(names)} check(s): {new} new opportunit{'y' if new == 1 else 'ies'}."]
                 lines += [f"{n}: {r.summary or ('failed: ' + (r.error or ''))}" for n, r in zip(names, results, strict=True)]
@@ -451,26 +644,26 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
                 return
             if len(parts) == 3 and parts[0] == "action" and parts[2] in ("approve", "execute", "ignore"):
                 aid, verb = int(parts[1]), parts[2]
-                action = store.get_action(aid)
+                action = self.store.get_action(aid)
                 if not action:
                     self._send("no such action", 404)
                     return
                 try:
                     if verb == "ignore":
-                        store.set_action_status(aid, "ignored")
+                        self.store.set_action_status(aid, "ignored")
                         msg = f"Ignored: {action['title']}"
                     elif verb == "approve":
-                        store.set_action_status(aid, "approved")
+                        self.store.set_action_status(aid, "approved")
                         if action["context"].get("draft_id"):
-                            store.set_draft_approval(action["context"]["draft_id"], "approved", by="panel")
+                            self.store.set_draft_approval(action["context"]["draft_id"], "approved", by="panel")
                         msg = f"Approved: {action['title']}"
                     else:
-                        outcome = execute_action(ws, store, ctx, maybe_llm(), action)
-                        store.set_action_status(aid, "executed")
-                        store.record_outcome(aid, "pending", note=f"executed: {outcome[:200]}")
+                        outcome = execute_action(self.ws, self.store, self.ctx, maybe_llm(), action)
+                        self.store.set_action_status(aid, "executed")
+                        self.store.record_outcome(aid, "pending", note=f"executed: {outcome[:200]}")
                         msg = f"Executed: {action['title']} — {outcome}"
                 except Exception as exc:
-                    store.set_action_status(aid, "failed")
+                    self.store.set_action_status(aid, "failed")
                     msg = f"Failed: {type(exc).__name__}: {exc}"
                 self._redirect("/?msg=" + quote(msg[:900]))
                 return
@@ -481,11 +674,14 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
 
 def serve(ws: Workspace, store: Store, ctx: BusinessContext, host: str = "127.0.0.1", port: int = 8791) -> int:
     password = os.environ.get("REVENUEOS_PANEL_PASSWORD") or None
-    if host not in ("127.0.0.1", "localhost", "::1") and not password:
-        print("refusing to bind a non-loopback address without REVENUEOS_PANEL_PASSWORD", flush=True)
+    accounts = Accounts(ws.root)
+    multi = accounts.enabled()
+    if host not in ("127.0.0.1", "localhost", "::1") and not password and not multi:
+        print("refusing to bind a non-loopback address without REVENUEOS_PANEL_PASSWORD or accounts", flush=True)
         return 2
-    server = ThreadingHTTPServer((host, port), make_handler(ws, store, ctx, password=password))
-    print(f"RevenueOS panel on http://{host}:{port}  (auth: {'password' if password else 'none — localhost only'}; Ctrl-C to stop)", flush=True)
+    server = ThreadingHTTPServer((host, port), make_handler(ws, store, ctx, password=password, accounts=accounts if multi else None))
+    mode = f"accounts ({len(accounts.list())} tenants)" if multi else ("password" if password else "none — localhost only")
+    print(f"RevenueOS panel on http://{host}:{port}  (auth: {mode}; Ctrl-C to stop)", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

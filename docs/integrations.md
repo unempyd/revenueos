@@ -1,105 +1,61 @@
-# Integrations
+# Integrations — connections, permissions, executors
 
-What RevenueOS connects to today, and how each connection actually works.
+RevenueOS reads only what a stranger can read until the business authorises an account. Each
+authorisation is a **connection**: a provider, the identity on the other side, the scopes it granted,
+the tokens that prove it, and one switch the owner controls: **allow changes**.
 
-## Website (crawl)
+## The permission model, in order
 
-The `seo` and `measure` workers crawl the website configured in `revenueos.yaml`
-(`website`) directly — no API key needed. The crawl looks for missing or duplicate page
-titles and meta descriptions, thin pages, and a missing sitemap; `measure` re-crawls a
-page after a fix is executed to confirm whether it actually changed. A domain-authority
-comparison against your configured competitors uses a public domain-rating lookup; when
-that endpoint is unavailable, the comparison is reported as unavailable rather than
-guessed.
+1. The provider's scopes bound what is possible (a read-only Stripe key cannot invoice, whatever we ask).
+2. The owner flips **allow changes** per connection. Off by default. A connected account is read-only
+   until a human turns it on, on the Connections page or with `revenueos connect … --allow-changes`.
+3. Every change still arrives as an action a human approves on TODAY. The executor checks 1 and 2 at
+   run time and returns a plain sentence when it refuses ("stripe is connected read-only — turn on
+   'allow changes' …"). Nothing retries around a refusal.
 
-## Hacker News
+Tokens live in `data/connections.json` (mode 600). Set `REVENUEOS_TOKEN_KEY` and they are sealed
+(Fernet) at rest; `revenueos connections` says which state you are in.
 
-The `monitor` worker searches Hacker News's public search index for threads relevant to
-your business (built from your canon: what you do, your wedge, your audience, and a set
-of search seeds). No API key is required. Every candidate thread passes a strict,
-default-reject relevance gate before it becomes a market-signal action — most candidates
-are rejected.
+## Providers
 
-## Ad exports (CSV)
+| Provider | Reads | Changes (executor) | Needs | Connect |
+|---|---|---|---|---|
+| Stripe | customers, subscriptions, invoices, charges → revenue 30d, MRR, open invoices (`billing` worker; Spend page) | `send_invoice`: create and send an invoice to a lead | a secret or restricted key | `revenueos connect stripe --key sk_…` |
+| Website in git (GitHub Pages, Netlify, Vercel) | HTML files | `site_deploy`: canonical, JSON-LD schema, title, meta description committed and pushed | repo, site path, a token that can push (`gh auth login` or `GITHUB_TOKEN`) | `revenueos connect github_site --repo owner/name --path website` |
+| WordPress | pages | `site_deploy`: the same head fixes through the REST API | site URL, user, Application Password | `revenueos connect wordpress --site … --user … --app-password …` |
+| Google | Search Console queries/pages, GA4 sessions/conversions (`analytics` worker) | `book_call` on Google Calendar with a Meet link; `ads_pause`, `ads_budget` on Google Ads (`ads-live` worker) | an OAuth client (`GOOGLE_OAUTH_CLIENT_ID/_SECRET`); Google Ads also `GOOGLE_ADS_DEVELOPER_TOKEN` + `GOOGLE_ADS_CUSTOMER_ID` | `revenueos connect google` (browser consent) or the Connections page |
+| Meta Ads | campaigns, spend, results (`ads-live` worker) | `ads_pause`, `ads_budget` | a Meta app (`META_APP_ID/_SECRET`) + `META_AD_ACCOUNT_ID` | `revenueos connect meta` |
+| Calendar invites by email | — | `book_call`: RFC 5545 invite sent from the business mailbox when Google is not connected | the outreach mailbox (`smtp` in revenueos.yaml + `SMTP_PASSWORD`) | automatic |
 
-The `ads-audit` worker reads CSV files you drop in `data/exports/`, named
-`ads-<platform>.csv` (for example `ads-google.csv`, `ads-meta.csv`), where `<platform>` is
-one of `google`, `meta`, `youtube`, `linkedin`, `tiktok`, `microsoft`, `apple`, `amazon`,
-`reddit`, `pinterest`, `snapchat`, `x`. Each file is a generic 13-column export:
+OAuth uses the authorisation-code flow with PKCE. From the CLI a loopback listener on 127.0.0.1
+catches the redirect; from the hosted panel the callback is `/connections/<provider>/callback`.
+Refresh happens on demand and the refreshed token is written back.
 
+## What was proven at runtime (2026-09-13)
+
+- **Stripe, live account**: connected; `billing` recorded real numbers (0 customers, MRR 0.00 AUD,
+  revenue 30d 0.00 AUD); `send_invoice` created a draft invoice to our own address and deleted it;
+  the permission switch refused the same call while off.
+- **Site executor, live**: with the public repo connected as the site, `seo` found the two head
+  defects on unempyd.github.io/revenueos as deployable fixes; approved, executed → two commits pushed
+  by the executor; the live page carried both tags within 20 s; `measure` recorded
+  `canonical_present 0 → 1` and `local_schema_present 0 → 1`.
+- **Book the call, live**: an invite went out from the RevenueOS mailbox (to itself) through the
+  executor; the inbox worker read the mailbox afterwards.
+- **Hosted, multi-tenant**: two customer accounts on one host, each bound to its own workspace by a
+  signed session; unauthenticated and wrong-password requests get 401; each tenant sees only its own
+  TODAY, Connections and Spend.
+- **Google and Meta adapters**: every request shape exercised against mocked endpoints in
+  `tests/test_connections.py`; live use waits on the OAuth client / app the owner registers once.
+
+## Hosted mode
+
+```bash
+revenueos workspace new /srv/revenueos           # the host root
+revenueos --root /srv/revenueos accounts add owner@salon.example 'a long password'
+revenueos --root /srv/revenueos serve --host 0.0.0.0 --port 8791   # accounts.json present → login by email
 ```
-date, account_id, account_name, campaign_id, campaign_name, campaign_status,
-creative_id, creative_name, conversion_action, conversions, budget, spend, currency
-```
 
-The worker flags campaigns spending with zero conversions, spend concentrated in one
-campaign (over 60% of total spend), and campaigns pacing more than 25% over their daily
-budget — all deterministically, no LLM required. Dropping an updated export after a fix
-lets `measure` compute the spend/conversions delta.
-
-## Lead CSV drops
-
-The `discover` worker reads any file matching `data/exports/leads*.csv`, using the column
-set common to lead-export tools such as Instantly and Smartlead:
-
-```
-email, first_name, last_name, company, title, website, linkedin_url, reason
-```
-
-Each new row becomes one `prospect` action.
-
-## SMTP / IMAP mailbox
-
-Real outreach sending and reply/bounce detection use your own mailbox: `smtp.host` and
-`imap.host` in `revenueos.yaml`, with `SMTP_PASSWORD` / `IMAP_PASSWORD` supplied via the
-environment (never stored in the workspace). Without a mailbox connected, `outreach` still
-drafts (or writes sends to `data/outputs/` in dry-run mode) and `inbox` still processes
-`.eml` files dropped in `data/exports/inbox/` for offline testing.
-
-## Connector CLIs
-
-`tools/clis/` ships 64 small, dependency-free connector scripts, each a standalone Node.js
-file that talks to one external platform once you export its API key. Run any of them
-directly (`node tools/clis/<name>.js <resource> <action> ...`); `revenueos tools` lists
-every connector and marks which ones have a credential present in your environment.
-
-**Analytics** — Adobe Analytics, Amplitude, Coupler, GA4, Hotjar, Mixpanel, Optimizely,
-Pendo, Plausible, Segment, SimilarWeb, Supermetrics
-
-**CRM / sales engagement** — ActiveCampaign, Close, Crossbeam, Customer.io, Intercom,
-Kit, Klaviyo, Mailchimp, Outreach, PartnerStack
-
-**Email** — Beehiiv, Brevo, Demio, Instantly, Lemlist, Postmark, Resend, SendGrid
-
-**SEO** — Ahrefs, DataForSEO, Google Search Console, Keywords Everywhere, RankParse,
-SEMrush
-
-**Ads** — Google Ads, LinkedIn Ads, Meta Ads, TikTok Ads
-
-**Enrichment** — Apollo, Clay, Clearbit, Exa, G2, GitHub Prospects, Hunter, Snov,
-Trustpilot, ZoomInfo
-
-**Other** — AirOps, Buffer, Calendly, Dub, Livestorm, Mention Me, OneSignal, Paddle,
-Rewardful, SavvyCal, Tolt, Typeform, Wistia, Zapier
-
-Each connector reads exactly one credential set from the environment (for example
-`AHREFS_API_KEY`, or `GA4_ACCESS_TOKEN`) and does nothing without it — there is no shared
-credential store and no fallback to a stored key. Note that the `outreach` connector CLI
-talks to the Outreach sales-engagement platform; it is unrelated to RevenueOS's own
-`outreach` worker described in `docs/architecture.md`.
-
-## An optional external lead-generation service
-
-The `discover` worker can source prospects from OpenOutreach, an independent,
-separately-licensed lead-generation service that runs as its own process or container
-(`docker compose --profile outreach`). RevenueOS never links its code in-process; the
-only contract between the two is OpenOutreach's own JSON-Lines output on stdout, which
-`discover` reads and ingests exactly like a CSV drop. Nothing else is shared.
-
-## Search Console and GA4 — connector present, measurement wiring not yet built
-
-`tools/clis/google-search-console.js` and `tools/clis/ga4.js` exist and will talk to
-their respective APIs once you supply an access token, but neither is wired into the
-`measure` worker yet. Today, SEO outcomes are measured by re-crawling the page directly;
-connecting Search Console or GA4 output to `measure` so that indexing and traffic changes
-become recorded outcomes is on the roadmap, not shipped.
+Each account gets `tenants/<slug>/`, a full workspace. The orchestrator runs per workspace
+(`REVENUEOS_ROOT=/srv/revenueos/tenants/<slug> revenueos orchestrator`). `deploy/` holds the container
+and Fly/Railway configs; the same image serves both single- and multi-tenant modes.
