@@ -42,7 +42,7 @@ nav a{margin-right:14px;color:#333} nav{margin-bottom:20px;font-size:14px}
 .row{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:12px 16px;margin-bottom:8px}
 .t{flex:1} .t b{display:block} .t small{color:#666;white-space:pre-wrap} .type{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888}
 form{display:inline} button{border:1px solid #ccc;background:#fff;border-radius:6px;padding:6px 10px;cursor:pointer}
-button.x{background:#111;color:#fff;border-color:#111} .msg{background:#eef6ee;border:1px solid #cde3cd;padding:10px 14px;border-radius:8px;margin-bottom:16px}
+button.x{background:#111;color:#fff;border-color:#111} .msg{white-space:pre-line;background:#eef6ee;border:1px solid #cde3cd;padding:10px 14px;border-radius:8px;margin-bottom:16px}
 table{border-collapse:collapse;width:100%;background:#fff} td,th{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:14px;vertical-align:top}
 .ok{color:#187a3a} .pend{color:#8a6d00} .none{color:#888}
 label{display:block;margin:12px 0 4px;font-weight:600} input,textarea{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font:inherit}
@@ -59,6 +59,10 @@ PAGE = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="wi
 ROW = """<div class="row"><div class="t"><span class="type">{atype}</span><b>{title}</b><small>{content}</small>{link}</div>
 <form method="post" action="/action/{id}/approve"><button>Approve</button></form>
 <form method="post" action="/action/{id}/execute"><button class="x">Execute</button></form>
+<form method="post" action="/action/{id}/ignore"><button>Ignore</button></form></div>"""
+
+ROW_APPROVED = """<div class="row"><div class="t"><span class="type">{atype} · approved, waiting to run</span><b>{title}</b><small>{content}</small>{link}</div>
+<form method="post" action="/action/{id}/execute"><button class="x">Execute now</button></form>
 <form method="post" action="/action/{id}/ignore"><button>Ignore</button></form></div>"""
 
 LOGIN = """<form method="post" action="/login"><label>Panel password</label><input type="password" name="password" autofocus>
@@ -160,7 +164,7 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
             msg = parse_qs(url.query).get("msg", [""])[0]
             if path == "/api/today":
                 b = build_brief(store)
-                self._send(json.dumps({"counts": b.counts, "funnel": b.funnel, "pipeline_value": b.pipeline_value, "actions": b.actions,
+                self._send(json.dumps({"counts": b.counts, "funnel": b.funnel, "pipeline_value": b.pipeline_value, "actions": b.actions, "approved": b.approved,
                                        "results": b.results, "summary": b.summary}, default=str), ctype="application/json")
             elif path == "/results":
                 self._send(self._page("RESULTS", f"{ctx.company_name} — what RevenueOS did and what happened", self._results_html(), msg))
@@ -198,9 +202,21 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
             )
             run_form = ('<form method="post" action="/run/all"><button>Run all workers now</button></form> '
                         '<form method="post" action="/run/measure"><button>Measure results</button></form>')
+            approved_rows = "".join(
+                ROW_APPROVED.format(
+                    id=a["id"], atype=html.escape(a["action_type"].replace("_", " ")), title=html.escape(a["title"]),
+                    content=html.escape((a["content"] or "")[:400]),
+                    link=f'<br><a href="{html.escape(a["source_url"])}" target="_blank" rel="noopener">{html.escape(a["source_url"])}</a>' if a.get("source_url") else "",
+                )
+                for a in b.approved[:100]
+            )
+            approved_html = (f"<h2>Approved, waiting to run ({len(b.approved)})</h2>"
+                             "<p class='sub'>You said yes. Nothing happens until Execute; Execute sends the email or runs the skill and the result lands in RESULTS.</p>"
+                             + approved_rows) if b.approved else ""
             return (f'<div class="brief">{html.escape(chr(10).join(b.lines()))}</div>{run_form}<h2>Approve / Execute / Ignore</h2>'
                     + (rows or "<p>Nothing pending.</p>")
-                    + "<p class='sub'>Approve = mark as wanted. Execute = do it now (send / run the skill). Ignore = drop it.</p>")
+                    + "<p class='sub'>Approve = mark as wanted. Execute = do it now (send / run the skill). Ignore = drop it.</p>"
+                    + approved_html)
 
         def _results_html(self) -> str:
             b = build_brief(store)
@@ -276,8 +292,10 @@ def make_handler(ws: Workspace, store: Store, ctx: BusinessContext, *, password:
                 names = ["discover", "outreach", "inbox", "seo", "ads-audit", "content", "monitor", "measure"] if parts[1] == "all" else [parts[1]]
                 llm = maybe_llm()
                 results = [run_worker(n, ws, store, ctx, llm, "panel") for n in names]
-                msg = "; ".join(f"{n}: {r.summary or r.error}" for n, r in zip(names, results, strict=True))
-                self._redirect("/?msg=" + quote(msg[:900]))
+                new = sum(r.actions_created for r in results)
+                lines = [f"Ran {len(names)} check(s): {new} new opportunit{'y' if new == 1 else 'ies'}."]
+                lines += [f"{n}: {r.summary or ('failed: ' + (r.error or ''))}" for n, r in zip(names, results, strict=True)]
+                self._redirect("/?msg=" + quote("\n".join(lines)[:1200]))
                 return
             if len(parts) == 3 and parts[0] == "action" and parts[2] in ("approve", "execute", "ignore"):
                 aid, verb = int(parts[1]), parts[2]

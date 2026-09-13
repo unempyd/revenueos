@@ -131,3 +131,40 @@ def test_ads_result_is_measured_by_next_export(workspace, store, onboarded):
     assert run_worker("measure", workspace, store, onboarded, None).details["measured"] == 1
     o = store.latest_outcome(waste["id"])
     assert o["metric"] == "campaign_spend_delta" and o["before_value"] == 370.0 and o["after_value"] == 180.0
+
+
+def test_homepage_signal_findings_are_measured_on_the_live_page(workspace, store, onboarded, monkeypatch):
+    """The first real customer site: phone as text (no tel: link), no LocalBusiness schema, no canonical; Meta pixel + GA4 present."""
+    monkeypatch.setattr(seo, "crawl_website", _fake_crawl([]))
+    monkeypatch.setattr(seo, "authority_gap", lambda u, c: None)
+    before = {"ok": True, "url": "https://acme-scheduling.example/", "tel_link": False, "mailto_link": False, "booking_link": True,
+              "phone_text": True, "meta_pixel": True, "google_ads_tag": False, "ga4": True, "gtm": False, "local_schema": False, "canonical": False}
+    monkeypatch.setattr(seo, "homepage_signals", lambda site, timeout=15.0: before)
+    r = run_worker("seo", workspace, store, onboarded, None)
+    kinds = {a["context"]["kind"] for a in store.list_actions("pending", "seo_opportunity")}
+    assert r.ok and kinds == {"phone_not_tappable", "no_local_schema", "no_canonical"}
+    m = store.latest_metrics()
+    assert m["site_meta_pixel"] == 1.0 and m["site_google_ads_tag"] == 0.0 and m["site_booking_link"] == 1.0
+    a = next(a for a in store.list_actions("pending", "seo_opportunity") if a["context"]["kind"] == "phone_not_tappable")
+    assert a["context"]["skill"] == "operations/landing-page-cro"
+    store.set_action_status(a["id"], "executed")
+    store.record_outcome(a["id"], "pending", note="deliverable written")
+    r = run_worker("measure", workspace, store, onboarded, None)
+    assert store.latest_outcome(a["id"])["status"] == "no_effect"
+    monkeypatch.setattr(seo, "homepage_signals", lambda site, timeout=15.0: {**before, "tel_link": True})
+    r = run_worker("measure", workspace, store, onboarded, None)
+    o = store.latest_outcome(a["id"])
+    assert o["status"] == "measured" and o["metric"] == "tel_link_present" and o["after_value"] == 1.0
+
+
+def test_homepage_signals_parse_real_markup():
+    html = ('<html><head><title>Salon</title><link rel="canonical" href="https://s.example/">'
+            '<script>fbq("init", "700642230440253");</script><script src="https://www.googletagmanager.com/gtag/js?id=G-RKDVYP966W"></script>'
+            '<script type="application/ld+json">{"@type": "HairSalon"}</script></head>'
+            '<body>Call +61 8 0000 0000 <a href="/booking">Book</a></body></html>')
+    sig = seo.parse_signals(html, "https://s.example/")
+    assert sig["ok"] and sig["phone_text"] and not sig["tel_link"] and sig["booking_link"] and sig["meta_pixel"] and sig["ga4"]
+    assert sig["local_schema"] and sig["canonical"] and not sig["google_ads_tag"]
+    assert [f["kind"] for f in seo.signal_findings("https://s.example", sig)] == ["phone_not_tappable"]
+    bare = seo.parse_signals("<html><body>Call 08 0000 0000</body></html>", "https://b.example/")
+    assert [f["kind"] for f in seo.signal_findings("https://b.example", bare)] == ["phone_not_tappable", "no_local_schema", "no_canonical"]

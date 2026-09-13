@@ -41,6 +41,7 @@ class Brief:
     results: list[dict[str, Any]] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
     funnel: dict[str, int] = field(default_factory=dict)
+    approved: list[dict[str, Any]] = field(default_factory=list)  # decided yes, not executed yet
 
     def funnel_line(self) -> str | None:
         """'leads: 30 found · 9 contactable · 0 qualified' — three numbers, reported separately, so
@@ -77,13 +78,18 @@ class Brief:
     def render_text(self, company: str) -> str:
         head = [f"TODAY — {company}", ""]
         body = self.lines()
-        if not self.actions:
+        if not self.actions and not self.approved:
             body += ["", "Nothing pending. Run `revenueos run all` or wait for the orchestrator."]
         else:
-            body.append("")
-            for a in self.actions[:40]:
-                body.append(f"[{a['id']:>4}] {a['action_type']:<19} {a['title'][:90]}")
-            body += ["", "Approve / Execute / Ignore:  revenueos approve <id> | revenueos execute <id> | revenueos ignore <id>"]
+            if self.actions:
+                body.append("")
+                for a in self.actions[:40]:
+                    body.append(f"[{a['id']:>4}] {a['action_type']:<19} {a['title'][:90]}")
+                body += ["", "Approve / Execute / Ignore:  revenueos approve <id> | revenueos execute <id> | revenueos ignore <id>"]
+            if self.approved:
+                body += ["", f"APPROVED, waiting to run ({len(self.approved)}) — revenueos execute <id>"]
+                for a in self.approved[:40]:
+                    body.append(f"[{a['id']:>4}] {a['action_type']:<19} {a['title'][:90]}")
         if self.results:
             s = self.summary
             body += ["", "RESULTS", f"{s.get('executed', 0)} action(s) executed, {s.get('measured', 0)} with a measured result; "
@@ -137,4 +143,5 @@ def build_brief(store: Store) -> Brief:
         results=store.executed_actions(),
         summary=store.results_summary(),
         funnel=store.lead_funnel(),
+        approved=store.list_actions("approved"),
     )

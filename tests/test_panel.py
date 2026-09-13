@@ -63,7 +63,7 @@ def test_onboard_run_approve_execute_results_over_http(server, workspace, store,
 
     (workspace.exports / "leads.csv").write_text(LEADS_CSV)
     status, headers, _ = _req(srv, "POST", "/run/discover", "", cookie=cookie)
-    assert status == 303 and "prospect" in headers["Location"]
+    assert status == 303 and "qualified" in headers["Location"] and "Ran" in headers["Location"]
     status, _h, body = _req(srv, "GET", "/", cookie=cookie)
     assert "2 qualified prospects found" in body and "BrightSmile Dental" in body
 
@@ -71,6 +71,9 @@ def test_onboard_run_approve_execute_results_over_http(server, workspace, store,
     _req(srv, "POST", "/run/outreach", "", cookie=cookie)
     follow = next(a for a in store.list_actions("pending", "follow_up"))
     status, headers, _ = _req(srv, "POST", f"/action/{follow['id']}/approve", "", cookie=cookie)
+    # an approved action does not vanish: it stays on TODAY as "waiting to run" until executed or ignored
+    _s, _h, page = _req(srv, "GET", "/", cookie=cookie)
+    assert "Approved, waiting to run (1)" in page and follow["title"][:40] in page and "Execute now" in page
     assert status == 303 and "Approved" in headers["Location"]
     status, headers, _ = _req(srv, "POST", f"/action/{follow['id']}/execute", "", cookie=cookie)
     assert status == 303 and "Executed" in headers["Location"] and "dry-run" in headers["Location"]

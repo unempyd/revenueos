@@ -4,10 +4,12 @@
 
 RevenueOS is a self-hosted revenue department for one business: workers analyse the website, ad exports, lead lists, mailbox and Hacker News; every action waits for approval; approved actions are executed (email send, or a skill run by Claude); outcomes are measured and shown next to the action. Community is free; Pro ($99/month), Business ($299) and Agency ($999) add continuous operation, hosting and multi-brand features.
 
+Safety model, by design: workers never send, publish or spend — they only read and propose. Only an action a human explicitly approves can act, and sending is additionally bounded by a daily cap, a suppression list, List-Unsubscribe and reply-STOP handling. Credentials are read from the environment and are never written into the workspace. The control panel refuses to bind a public address without a password. Every outcome is recorded as measured, no_effect or unmeasurable from real evidence (a re-crawl, an IMAP reply, the next ad export) — RevenueOS never synthesises a metric and does not claim revenue it has not measured. Running it read-only against a website requires no credentials at all.
+
 ## Links
 - Product site: https://unempyd.github.io/revenueos/
 - Source and install: https://github.com/unempyd/revenueos
-- Install: pip install "git+https://github.com/unempyd/revenueos"
+- Install: pip install revenueos   (published on PyPI: https://pypi.org/project/revenueos/)
 - Runtime proof (real run): https://unempyd.github.io/revenueos/proof.html
 - Pricing: https://unempyd.github.io/revenueos/pricing.html
 - MCP server + Claude Code plugin: https://github.com/unempyd/revenueos/tree/main/mcp

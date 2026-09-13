@@ -60,6 +60,16 @@ def measure_seo(store: Store, action: dict[str, Any]) -> tuple[str, dict[str, An
         found = bool(data.get("sitemap_found")) or sitemap_under_path(url)
         return ("measured" if found else "no_effect"), {"metric": "sitemap_present", "before_value": 0.0, "after_value": float(found),
                                                         "before": before, "after": {"sitemap_found": found}}
+    if kind in SIGNAL_KINDS:
+        from .seo import homepage_signals
+
+        signal, metric = SIGNAL_KINDS[kind]
+        sig = homepage_signals(url)
+        if not sig.get("ok"):
+            return "pending", {"note": "homepage unreachable at measurement time", "after": sig}
+        present = bool(sig.get(signal))
+        return ("measured" if present else "no_effect"), {"metric": metric, "before_value": 0.0, "after_value": float(present),
+                                                          "before": before, "after": {signal: present}}
     after = page_snapshot(url)
     if not after["ok"]:
         return "pending", {"note": "page unreachable at measurement time", "after": after}
@@ -81,6 +91,10 @@ def measure_seo(store: Store, action: dict[str, Any]) -> tuple[str, dict[str, An
         return ("measured" if changed else "no_effect"), {"metric": "title_changed", "before_value": 0.0, "after_value": float(bool(changed)),
                                                           "before": before, "after": after}
     return "unmeasurable", {"note": f"no measurement defined for {kind}"}
+
+
+SIGNAL_KINDS = {"phone_not_tappable": ("tel_link", "tel_link_present"), "no_local_schema": ("local_schema", "local_schema_present"),
+                "no_canonical": ("canonical", "canonical_present")}
 
 
 def measure_send(store: Store, action: dict[str, Any]) -> tuple[str, dict[str, Any]]:

@@ -126,12 +126,11 @@ class DiscoverWorker:
         b = ingest(store, csv_rows, run_id, "csv")
         batch = {k: a[k] + b[k] for k in a}
         funnel = store.lead_funnel()
-        note = "" if openoutreach_command() else " OpenOutreach not installed (pip install openoutreach, or docker compose --profile outreach up)."
+        note = None if openoutreach_command() else "no lead source connected: drop a leads*.csv in data/exports/ or install OpenOutreach"
         return WorkerResult(
             ok=True,
-            summary=(f"{batch['found']} lead(s) read, {batch['contactable']} contactable, {batch['qualified']} qualified; "
-                     f"{batch['created']} new prospect action(s). Workspace: {funnel['found']} found · {funnel['contactable']} contactable · "
-                     f"{funnel['qualified']} qualified.{note}"),
+            summary=(f"{batch['found']} lead(s) read: {batch['contactable']} contactable, {batch['qualified']} qualified, "
+                     f"{batch['created']} new. All leads: {funnel['found']} found · {funnel['contactable']} contactable · {funnel['qualified']} qualified."),
             actions_created=batch["created"],
-            details={"openoutreach_rows": len(oo_rows), "csv_rows": len(csv_rows), "batch": batch, "funnel": funnel},
+            details={"openoutreach_rows": len(oo_rows), "csv_rows": len(csv_rows), "batch": batch, "funnel": funnel, **({"note": note} if note else {})},
         )

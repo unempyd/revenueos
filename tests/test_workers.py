@@ -191,8 +191,24 @@ def test_content_matches_channels_to_skills(workspace, store, onboarded):
     acts = store.list_actions("pending", "content_opportunity")
     assert {a["context"]["channel"] for a in acts} == {"cold email", "seo", "linkedin"}
     assert all("/" in a["context"]["skill"] for a in acts)
+    # written for the customer, never the catalogue: no trigger text, no persona, the business named
+    for a in acts:
+        assert "Use when" not in a["content"] and "Trigger" not in a["content"] and "You are" not in a["content"]
+        assert "Acme Scheduling" in a["content"] and a["title"].split(":")[0] in ("Cold Email", "SEO", "LinkedIn"), a["title"]
+    titles = {a["title"] for a in acts}
+    assert "Cold Email: A first-touch cold email and its follow-up sequence" in titles
     # no LLM → executing explains instead of failing
     assert "ANTHROPIC_API_KEY" in execute_action(workspace, store, onboarded, None, acts[0])
+
+
+def test_content_curated_map_points_at_real_skills(workspace):
+    from revenueos.registry import load_registry
+    from revenueos.workers.content import CHANNEL_SKILLS, opportunities_for
+
+    ids = {f"{s['source']}/{s['slug']}" for s in load_registry(workspace)["skills"]}
+    missing = [sid for entries in CHANNEL_SKILLS.values() for sid, _ in entries if sid not in ids]
+    assert missing == []
+    assert opportunities_for(workspace, ["carrier pigeon"]) == []  # unmapped channel → nothing, never a guess
 
 
 def test_workers_refuse_before_onboarding(workspace, store):
@@ -203,3 +219,37 @@ def test_workers_refuse_before_onboarding(workspace, store):
         r = run_worker(name, workspace, store, ctx, None)
         assert not r.ok and "not onboarded" in r.error
     assert store.list_runs()[0]["status"] == "failed"
+
+
+def test_seo_same_page_under_two_spellings_is_not_a_duplicate_title(workspace, store, onboarded, monkeypatch):
+    """Found on the first real customer site: the homepage crawled as both 'https://x.au' and 'https://x.au/'."""
+    import json as _json
+
+    async def fake_crawl(url, max_pages=10):
+        page = {"meta": {"title": "Best Salon", "description": "d" * 40}, "excerpt": "x" * 400}
+        return _json.dumps({"ok": True, "sitemap_found": True, "pages": [
+            {"url": "https://x.au", **page}, {"url": "https://x.au/", **page}, {"url": "https://x.au/index.html", **page},
+            {"url": "https://x.au/#top", **page}]})
+
+    monkeypatch.setattr(seo, "crawl_website", fake_crawl)
+    monkeypatch.setattr(seo, "authority_gap", lambda *a, **k: None)
+    findings, _ = seo.crawl_findings("https://x.au")
+    assert [f["kind"] for f in findings] == []
+    assert seo.canonical_url("https://X.au/index.html#top") == "https://x.au/"
+    assert seo.canonical_url("https://x.au/about/") == "https://x.au/about"
+
+
+def test_content_deliverable_sentence_strips_model_instructions():
+    from revenueos.workers.content import ALIAS_RE, deliverable_sentence
+
+    assert deliverable_sentence("Write Google Ads copy and build campaign structures. Use when the user asks to create Google Ads, "
+                                "write ad copy for search or display. Trigger phrases include \"Google Ads\", \"PPC\".") == \
+        "Write Google Ads copy and build campaign structures"
+    assert deliverable_sentence("You are an SEO expert and content strategist. Use this skill when the user wants to improve organic "
+                                "search rankings, plan SEO content, analyze competitors, generate keyword strategies.") == \
+        "improve organic search rankings and plan SEO content"
+    assert deliverable_sentence("When the user wants to generate, iterate, or scale ad creative — headlines, descriptions, hooks.") == \
+        "generate, iterate, or scale ad creative"
+    assert deliverable_sentence('Use when the user mentions "build programmatic SEO pages", "generate pages at scale", or "template pages".') == \
+        "build programmatic SEO pages and generate pages at scale"
+    assert ALIAS_RE.search("Compatibility skill for seo-google. Use when a user or upstream workflow invokes this name; route the task to `seo-audit`")

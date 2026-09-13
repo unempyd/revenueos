@@ -76,3 +76,11 @@ def answers_file(tmp_path: Path) -> Path:
     p = tmp_path / "answers.json"
     p.write_text(json.dumps(ANSWERS))
     return p
+
+
+@pytest.fixture(autouse=True)
+def _no_homepage_network(monkeypatch):
+    """homepage_signals fetches the live homepage; tests opt in by re-patching it."""
+    from revenueos.workers import seo
+
+    monkeypatch.setattr(seo, "homepage_signals", lambda site, timeout=15.0: {"ok": False, "error": "offline (test)"})

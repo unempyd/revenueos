@@ -72,9 +72,22 @@ def github_metrics(repo: str) -> dict[str, float]:
     releases = _gh(f"repos/{repo}/releases")
     if isinstance(releases, list):
         out["growth_release_downloads"] = float(sum(a.get("download_count", 0) for rel in releases for a in rel.get("assets", [])))
-    leads = _gh(f"repos/{repo}/issues?labels=hosted-access&state=all&per_page=100")
-    if isinstance(leads, list):
-        out["growth_hosted_access_requests"] = float(len([i for i in leads if "pull_request" not in i]))
+    # labelled requests, plus any issue the template titled "Hosted access: <tier>" whose label got dropped
+    # (GitHub discards a template label that does not exist in the repo; the first real request arrived unlabelled)
+    labelled = _gh(f"repos/{repo}/issues?labels=hosted-access&state=all&per_page=100")
+    titled = _gh(f"repos/{repo}/issues?state=all&per_page=100")
+    seen: set[int] = set()
+    for batch in (labelled, titled):
+        if not isinstance(batch, list):
+            continue
+        for i in batch:
+            if "pull_request" in i:
+                continue
+            labels = {(lb.get("name") if isinstance(lb, dict) else str(lb)) for lb in i.get("labels", [])}
+            if "hosted-access" in labels or str(i.get("title", "")).lower().startswith("hosted access:"):
+                seen.add(int(i.get("number", 0)))
+    if isinstance(labelled, list) or isinstance(titled, list):
+        out["growth_hosted_access_requests"] = float(len(seen))
     return out
 
 

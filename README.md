@@ -45,7 +45,7 @@ It does not claim revenue it has not measured.
 ## Install
 
 ```bash
-pip install "git+https://github.com/unempyd/revenueos"   # or: uv tool install git+https://github.com/unempyd/revenueos
+pip install revenueos   # or: uv tool install revenueos
 revenueos init                       # the questionnaire → your business context
 revenueos run all                    # every worker once
 revenueos today                      # the brief

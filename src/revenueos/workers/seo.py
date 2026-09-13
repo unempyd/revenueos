@@ -43,7 +43,68 @@ SKILL_FOR = {
     "no_sitemap": ("seo", "technical-seo-triage"),
     "authority_gap": ("seo", "authority-mark-keyword-difficulty"),
     "indexing_surface": ("seo", "technical-seo-triage"),
+    # homepage signals (local businesses): each is re-checked by measure.py on the live page
+    "phone_not_tappable": ("operations", "landing-page-cro"),
+    "no_local_schema": ("operations", "local-seo"),
+    "no_canonical": ("seo", "technical-seo-triage"),
 }
+
+SIGNAL_PATTERNS = {
+    "tel_link": r"href=[\"']tel:",
+    "mailto_link": r"href=[\"']mailto:",
+    "booking_link": r"href=[\"'][^\"']*(?:book|appointment|reserve|schedule)[^\"']*[\"']",
+    "phone_text": r"(?:\+\d{1,3}[ \-]?)?(?:\(0?\d{1,3}\)|0\d{1,3})[ \-]?\d{3,4}[ \-]?\d{3,4}",
+    "meta_pixel": r"connect\.facebook\.net/[a-z_]+/fbevents\.js|fbq\(\s*['\"]init",
+    "google_ads_tag": r"AW-\d{6,}|googleadservices\.com/pagead/conversion",
+    "ga4": r"\bG-[A-Z0-9]{6,}\b",
+    "gtm": r"GTM-[A-Z0-9]{4,}",
+    "local_schema": r"\"@type\"\s*:\s*\"(?:LocalBusiness|HairSalon|BeautySalon|Dentist|Restaurant|Store|MedicalBusiness|LegalService|Plumber|Electrician|AutoRepair|RealEstateAgent|ProfessionalService|HomeAndConstructionBusiness|FinancialService|HealthAndBeautyBusiness)\"",
+    "canonical": r"<link[^>]+rel=[\"']canonical[\"']",
+}
+
+
+def homepage_signals(site: str, timeout: float = 15.0) -> dict[str, Any]:
+    """Boolean signals read from the live homepage HTML. `ok: False` when the page cannot be fetched;
+    nothing is inferred then."""
+
+    import httpx
+
+    url = site if site.startswith("http") else f"https://{site}"
+    try:
+        r = httpx.get(url, timeout=timeout, follow_redirects=True,
+                      headers={"User-Agent": "Mozilla/5.0 (compatible; RevenueOS/0.1; +https://unempyd.github.io/revenueos/)"})
+    except httpx.HTTPError as e:
+        return {"ok": False, "error": type(e).__name__}
+    if r.status_code != 200 or "text/html" not in r.headers.get("content-type", ""):
+        return {"ok": False, "error": f"http {r.status_code}"}
+    return parse_signals(r.text[:800_000], str(r.url))
+
+
+def parse_signals(html: str, url: str) -> dict[str, Any]:
+    import re
+
+    out: dict[str, Any] = {"ok": True, "url": url}
+    for name, pattern in SIGNAL_PATTERNS.items():
+        out[name] = bool(re.search(pattern, html, re.I))
+    return out
+
+
+def signal_findings(site: str, signals: dict[str, Any]) -> list[dict[str, Any]]:
+    if not signals.get("ok"):
+        return []
+    url = signals.get("url") or site
+    out = []
+    if signals.get("phone_text") and not signals.get("tel_link"):
+        out.append({"kind": "phone_not_tappable", "url": url,
+                    "why": "The homepage shows a phone number as plain text with no tel: link, so visitors on a phone cannot tap to call.",
+                    "before": {"tel_link": False, "phone_text": True}})
+    if not signals.get("local_schema"):
+        out.append({"kind": "no_local_schema", "url": url,
+                    "why": "No LocalBusiness (or a subtype such as HairSalon) schema.org markup on the homepage; Google cannot read the business type, address and hours from the page.",
+                    "before": {"local_schema": False}})
+    if not signals.get("canonical"):
+        out.append({"kind": "no_canonical", "url": url, "why": "The homepage declares no canonical URL.", "before": {"canonical": False}})
+    return out
 
 
 def sitemap_under_path(site: str) -> bool:
@@ -77,6 +138,18 @@ def is_html_page(url: str) -> bool:
     return "sitemap" not in path and not path.endswith("/robots.txt")
 
 
+def canonical_url(url: str) -> str:
+    """One key per page: scheme/host lowercased, fragment and query dropped, '/index.html' and a trailing
+    slash removed. 'https://x.au' and 'https://x.au/' are the same page, not a duplicate title."""
+    p = urlparse((url or "").strip())
+    path = p.path or "/"
+    for idx in ("/index.html", "/index.htm", "/index.php"):
+        if path.lower().endswith(idx):
+            path = path[: -len(idx)] + "/"
+    path = path.rstrip("/") or "/"
+    return f"{p.scheme.lower() or 'https'}://{p.netloc.lower()}{path}"
+
+
 def crawl_findings(site: str, max_pages: int = 12) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     raw = asyncio.run(_crawl(site, max_pages=max_pages))
     data = json.loads(raw)
@@ -84,10 +157,15 @@ def crawl_findings(site: str, max_pages: int = 12) -> tuple[list[dict[str, Any]]
     if not data.get("ok"):
         return findings, data
     titles: dict[str, list[str]] = {}
+    seen_pages: set[str] = set()
     for page in data.get("pages", []):
         url, meta, excerpt = page.get("url"), page.get("meta") or {}, page.get("excerpt") or ""
         if not is_html_page(url):
             continue
+        key = canonical_url(url)
+        if key in seen_pages:
+            continue  # the crawler fetched the same page under a second spelling
+        seen_pages.add(key)
         title = (meta.get("title") or "").strip()
         desc = (meta.get("description") or "").strip()
         before = {"title": title, "description": desc, "body_chars": len(excerpt)}
@@ -148,6 +226,11 @@ class SeoWorker:
             return WorkerResult(ok=False, summary="", error="no website in revenueos.yaml — run `revenueos init`")
         created = 0
         findings, crawl = crawl_findings(site)
+        signals = homepage_signals(site)
+        if signals.get("ok"):
+            for name in ("meta_pixel", "google_ads_tag", "ga4", "gtm", "booking_link", "tel_link", "local_schema"):
+                store.record_metric(f"site_{name}", float(bool(signals.get(name))), site=site)
+        findings += signal_findings(site, signals)
         for f in findings:
             src, skill = SKILL_FOR[f["kind"]]
             aid = store.create_action(
@@ -186,7 +269,7 @@ class SeoWorker:
             created += 1 if aid else 0
 
         pages = crawl.get("pages_fetched", 0)
-        return WorkerResult(ok=True, summary=f"{created} SEO opportunity(ies) from {pages} crawled pages, {len(findings)} crawl findings"
+        return WorkerResult(ok=True, summary=f"{created} new site issue(s), {len(findings)} open, from {pages} crawled pages"
                             + (", authority compared" if gap and not gap.get("error") and gap.get("user_dr") is not None
                                else (f", authority unavailable ({gap.get('user_error') or gap.get('error')})" if gap else "")) + ".",
                             actions_created=created, details={"pages": pages, "authority": gap})

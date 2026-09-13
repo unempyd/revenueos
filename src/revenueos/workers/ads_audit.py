@@ -128,7 +128,7 @@ class AdsAuditWorker:
     def run(self, ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, run_id: int) -> WorkerResult:
         exports = sorted(ws.exports.glob("ads-*.csv"))
         if not exports:
-            return WorkerResult(ok=True, summary="No ad exports found in data/exports/ (expected ads-<platform>.csv).", actions_created=0)
+            return WorkerResult(ok=True, summary="No ad data connected yet.", actions_created=0, details={"note": "export ads-<platform>.csv into data/exports/"})
         created, audited, errors = 0, [], []
         for path in exports:
             platform = path.stem.split("-", 1)[1].lower()

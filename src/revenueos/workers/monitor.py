@@ -72,5 +72,5 @@ class MonitorWorker:
             gate = "no candidate threads matched the search seeds"
         else:
             gate = "ungated (no LLM credential — recency only)"
-        return WorkerResult(ok=True, summary=f"{created} new market signal(s), {result.get('found', 0)} relevant HN thread(s) {gate}.",
+        return WorkerResult(ok=True, summary=f"{created} conversation(s) worth joining; {result.get('found', 0)} relevant thread(s) found.",
                             actions_created=created, details={"found": result.get("found", 0), "gated": result.get("gated")})

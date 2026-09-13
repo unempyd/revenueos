@@ -15,47 +15,109 @@ from typing import Any
 from ..context import BusinessContext
 from ..llm import LLM, Message
 from ..paths import Workspace
-from ..registry import load_registry, search_skills, skill_text
+from ..registry import load_registry, skill_text
 from ..store import Store
 from . import WorkerResult
 
-# channel keyword → registry query; preference order gives the "best known" implementation first
-CHANNEL_QUERIES: dict[str, list[str]] = {
-    "seo": ["seo content brief", "programmatic seo", "keyword opportunity"],
-    "linkedin": ["linkedin post", "linkedin content", "founder content"],
-    "email": ["newsletter", "email sequence", "lifecycle email"],
-    "cold email": ["cold email", "outbound sequence"],
-    "blog": ["blog post", "editorial", "content strategy"],
-    "website": ["landing page", "website copy", "conversion copy"],
-    "youtube": ["youtube", "video script", "short-form video"],
-    "twitter": ["twitter thread", "x post"],
-    "x": ["twitter thread"],
-    "reddit": ["reddit", "community"],
-    "google ads": ["google ads copy", "search ads"],
-    "meta ads": ["meta ads creative", "facebook ads copy"],
-    "ads": ["ad creative", "ad copy"],
-    "case studies": ["case study"],
-    "product hunt": ["product hunt launch"],
+# channel → (skill id, what the customer gets). Curated by hand and verified against the registry at
+# run time; a channel that is not here gets nothing. Lexical search over 790 skills produced
+# "Google: Develop a business idea" for a hair salon, so it is not used here.
+CHANNEL_SKILLS: dict[str, list[tuple[str, str]]] = {
+    "website": [("operations/landing-page-cro", "a conversion review of your main page with rewritten copy and calls to action")],
+    "seo": [("operations/seo-content-strategy", "an SEO content plan: the searches to target and the pages to write")],
+    "blog": [("operations/seo-blog-writer", "a search-optimised blog post")],
+    "linkedin": [("operations/linkedin-strategy", "a month of LinkedIn posts and a profile rewrite")],
+    "cold email": [("growth/cold-email", "a first-touch cold email and its follow-up sequence")],
+    "email": [("operations/email-marketing", "a newsletter or lifecycle email sequence")],
+    "newsletter": [("operations/email-marketing", "a newsletter issue and a sending plan")],
+    "instagram": [("operations/instagram-carousel", "Instagram carousel posts, slide by slide")],
+    "facebook": [("operations/social-content-planner", "a social posting plan for the month")],
+    "meta ads": [("growth/ad-creative", "Meta ad creative to test: headlines, primary text and hooks")],
+    "facebook ads": [("growth/ad-creative", "Meta ad creative to test: headlines, primary text and hooks")],
+    "google ads": [("creative/google-ads", "Google Ads copy and a campaign structure")],
+    "ads": [("growth/ad-creative", "ad creative to test: headlines, primary text and hooks")],
+    "google": [("operations/local-seo", "a Google Business Profile and local search plan for your locations")],
+    "google business profile": [("operations/local-seo", "a Google Business Profile and local search plan for your locations")],
+    "twitter": [("creative/thread-writer", "an X thread")],
+    "x": [("creative/thread-writer", "an X thread")],
+    "github": [("playbooks/open-source", "an open-source growth plan: README, launch and community")],
+    "hacker news": [("operations/launch", "a launch plan and the launch post")],
+    "reddit": [("growth/community-marketing", "a community participation plan")],
+    "youtube": [("playbooks/youtube", "a video script and description")],
+    "product hunt": [("playbooks/product-hunt-launch", "a Product Hunt launch plan")],
+    "case studies": [("gtm/case-study-builder", "a customer case study")],
 }
-PREFERRED_SOURCES = ("core", "growth", "operations", "seo", "pipelines", "creative", "playbooks")
+MAX_IDEAS_PER_RUN = 4
+
+# Catalogue entries that are plumbing, never an idea for a customer.
+ALIAS_RE = re.compile(r"^\s*compatibility skill|route the task to|^\s*alias (?:for|of)|invokes this name", re.I)
+# Everything after these markers is instructions to a model ("Use when the user asks…", "Trigger phrases include…").
+TRIGGER_RE = re.compile(r"(?:^|\b)(?:Use (?:this )?(?:skill )?when|Also use when|Use for|Trigger phrases?|Triggers?:|Invoke when|Use it when|When (?:the |a )?user)\b.*$", re.I | re.S)
 
 
-def opportunities_for(ws: Workspace, channels: list[str], per_channel: int = 2) -> list[dict[str, Any]]:
+WANTS_RE = re.compile(r"when (?:the |a )?user (?:wants to|needs to|asks to|asks for|wants|asks about|is trying to|mentions)\s+([^.]+)", re.I)
+
+
+def _shorten(text: str, limit: int = 96) -> str:
+    text = re.sub(r"\s+", " ", text).strip().strip(",;:").rstrip(".")
+    if len(text) <= limit:
+        return text
+    cut = text.rfind(", ", 40, limit)
+    if cut == -1:
+        cut = text.rfind(" ", 40, limit)
+    return text[: cut if cut > 0 else limit].strip().strip(",;:")
+
+
+def deliverable_sentence(description: str) -> str:
+    """What the customer gets, in one short clause: the first sentence of a skill description with the
+    model-facing trigger text removed; for persona-style descriptions ("You are an SEO expert. Use this
+    skill when the user wants to improve organic rankings, plan SEO content, …") the first two things
+    the user wants."""
+    desc = description or ""
+    text = TRIGGER_RE.sub("", desc).strip()
+    text = re.sub(r"^(?:You are|Act as)\b[^.]*\.\s*", "", text).strip()  # persona preambles
+    first = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0] if text else ""
+    if len(first.strip()) >= 12:
+        return _shorten(first)
+    m = WANTS_RE.search(desc)
+    if m:
+        clause = re.split(r"\s+[—–-]\s+|:|;", m.group(1), maxsplit=1)[0]
+        items = [i.strip().strip("\"'“”‘’") for i in re.split(r",\s*|\s+or\s+", clause) if i.strip()]
+        if any(len(i.split()) < 2 for i in items[:2]):  # "generate, iterate, or scale ad creative" is one clause, not a list
+            return _shorten(clause.strip().strip("\"'“”‘’"))
+        return _shorten(" and ".join(items[:2]))
+    return ""
+
+
+def customer_facing(skill: dict[str, Any], channel: str, ctx: BusinessContext) -> tuple[str, str] | None:
+    """(title, content) written for the business owner. None when the entry has nothing to say to a customer."""
+    if ALIAS_RE.search(skill.get("description") or "") or ALIAS_RE.search(skill.get("name") or ""):
+        return None
+    what = skill.get("what") or deliverable_sentence(skill.get("description") or "")
+    if len(what) < 12:
+        return None
+    label = channel.strip().title().replace("Seo", "SEO").replace("Linkedin", "LinkedIn").replace("Github", "GitHub").replace("Tiktok", "TikTok")
+    where = ctx.company_name + (f" ({ctx.manifest.get('category')})" if ctx.manifest.get("category") else "")
+    title = f"{label}: {what[0].upper() + what[1:]}"
+    content = (f"What you get: {what}, written for {where} from your business profile. "
+               "You approve it before anything is published.")
+    return title, content
+
+
+def opportunities_for(ws: Workspace, channels: list[str], per_channel: int = 1) -> list[dict[str, Any]]:
+    by_id = {f"{sk['source']}/{sk['slug']}": sk for sk in load_registry(ws)["skills"]}
     picked: list[dict[str, Any]] = []
     seen: set[str] = set()
     for ch in channels or ["website", "seo", "linkedin"]:
-        for q in CHANNEL_QUERIES.get(ch.lower().strip(), [ch]):
-            hits = search_skills(ws, q, limit=8)
-            hits.sort(key=lambda s: (PREFERRED_SOURCES.index(s["source"]) if s["source"] in PREFERRED_SOURCES else 99))
-            for s in hits:
-                key = f"{s['source']}/{s['slug']}"
-                if key in seen:
-                    continue
-                seen.add(key)
-                picked.append({**s, "channel": ch, "query": q})
-                if sum(1 for p in picked if p["channel"] == ch) >= per_channel:
-                    break
-            if sum(1 for p in picked if p["channel"] == ch) >= per_channel:
+        n = 0
+        for skill_id, what in CHANNEL_SKILLS.get(ch.lower().strip(), []):
+            sk = by_id.get(skill_id)
+            if not sk or skill_id in seen:
+                continue
+            seen.add(skill_id)
+            picked.append({**sk, "channel": ch, "what": what})
+            n += 1
+            if n >= per_channel:
                 break
     return picked
 
@@ -71,16 +133,22 @@ class ContentWorker:
         load_registry(ws)
         week = datetime.now(UTC).strftime("%G-W%V")
         created = 0
-        picks = opportunities_for(ws, ctx.channels)
+        picks = opportunities_for(ws, ctx.channels)[:MAX_IDEAS_PER_RUN]
         for s in picks:
+            facing = customer_facing(s, s["channel"], ctx)
+            if not facing:
+                continue
+            title, content = facing
             aid = store.create_action(
-                "content_opportunity", f"{s['channel']}: {s['name']}", s["description"][:400],
+                "content_opportunity", title, content,
                 run_id=run_id, dedupe_key=f"content:{week}:{s['source']}/{s['slug']}",
-                context={"executor": "run_skill", "skill": f"{s['source']}/{s['slug']}", "channel": s["channel"], "path": s["path"]},
+                context={"executor": "run_skill", "skill": f"{s['source']}/{s['slug']}", "channel": s["channel"], "path": s["path"],
+                         "skill_input": f"Produce: {title}. Channel: {s['channel']}."},
             )
             created += 1 if aid else 0
-        return WorkerResult(ok=True, summary=f"{created} content opportunity(ies) for channels {', '.join(ctx.channels) or 'defaults'} (week {week}).",
-                            actions_created=created, details={"picked": [f"{p['source']}/{p['slug']}" for p in picks]})
+        open_ = len(store.list_actions("pending", "content_opportunity"))
+        return WorkerResult(ok=True, summary=f"{created} new content idea(s) for {', '.join(ctx.channels) or 'your channels'}; {open_} open.",
+                            actions_created=created, details={"picked": [f"{p['source']}/{p['slug']}" for p in picks], "week": week})
 
 
 def execute_content(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, action: dict[str, Any]) -> str:

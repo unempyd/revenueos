@@ -112,7 +112,7 @@ class OutreachWorker:
                 context={"executor": "send_email", "draft_id": draft_id, "lead_id": lead["id"], "to": email, "hook": hook_name},
             )
             created += 1 if aid else 0
-        return WorkerResult(ok=True, summary=f"{created} outreach draft(s) ready for approval; {skipped} lead(s) skipped (no email or unsubscribed).",
+        return WorkerResult(ok=True, summary=f"{created} email draft(s) waiting for your approval; {skipped} lead(s) skipped (no email or unsubscribed).",
                             actions_created=created, details={"candidates": len(candidates), "skipped": skipped})
 
 
