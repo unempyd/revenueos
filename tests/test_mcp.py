@@ -67,7 +67,10 @@ async def test_lessons_tool_reads_the_learning_loop(server, workspace, onboarded
 async def test_today_empty_workspace(server, onboarded):
     result = await server.call_tool("revenueos_today", {})
     data = _structured(result)
+    offer = data.pop("offer")
     assert data == {"counts": {}, "pipeline_value": 0.0, "actions": [], "metrics": {}}
+    # nothing measured yet, so there is nothing to charge for and no link is invented
+    assert offer["state"] == "none" and offer["first_result_at"] is None and offer["payment_link"] is None
 
 
 async def test_results_empty_workspace(server, onboarded):

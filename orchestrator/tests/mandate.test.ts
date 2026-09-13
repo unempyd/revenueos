@@ -12,11 +12,11 @@ describe('loadMandate', () => {
 
   it('reads REVENUEOS_OPERATOR_MANDATE.md and reports its title, size and digest', async () => {
     const root = await mkdtemp(join(tmpdir(), 'revenueos-mandate-'));
-    const text = 'RevenueOS — Non-Negotiable Commercial Operating Mandate\n\nPurpose\n\nGenerate real revenue.\n';
+    const text = 'Acme Scheduling — Revenue Objective\n\nPurpose\n\nGenerate real revenue.\n';
     await writeFile(join(root, 'REVENUEOS_OPERATOR_MANDATE.md'), text);
     const m = await loadMandate(root);
     expect(m).not.toBeNull();
-    expect(m?.title).toBe('RevenueOS — Non-Negotiable Commercial Operating Mandate');
+    expect(m?.title).toBe('Acme Scheduling — Revenue Objective');
     expect(m?.chars).toBe(text.length);
     expect(m?.sha).toMatch(/^[0-9a-f]{12}$/);
     expect(m?.path.endsWith('REVENUEOS_OPERATOR_MANDATE.md')).toBe(true);

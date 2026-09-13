@@ -61,9 +61,10 @@ def revenueos_today() -> dict[str, Any]:
     """The RevenueOS Community brief: pending opportunities awaiting a decision, current
     pipeline value, and the latest metrics for this connected business. Call this first to
     see what RevenueOS found and what is waiting on approve/execute/ignore."""
-    _ws, store, _ctx = _boot()
-    brief = build_brief(store)
-    return {"counts": brief.counts, "pipeline_value": brief.pipeline_value, "actions": brief.actions, "metrics": brief.metrics}
+    ws, store, _ctx = _boot()
+    brief = build_brief(store, ws)
+    return {"counts": brief.counts, "pipeline_value": brief.pipeline_value, "actions": brief.actions,
+            "metrics": brief.metrics, "offer": brief.offer}
 
 
 @mcp.tool()
@@ -230,8 +231,8 @@ def revenueos_lessons(days: int = 60) -> dict[str, Any]:
 @mcp.resource("revenueos://today")
 def resource_today() -> str:
     """TODAY, rendered as text: pending opportunities, pipeline value, and how to decide on them."""
-    _ws, store, ctx = _boot()
-    return build_brief(store).render_text(ctx.company_name)
+    ws, store, ctx = _boot()
+    return build_brief(store, ws).render_text(ctx.company_name)
 
 
 @mcp.resource("revenueos://results")

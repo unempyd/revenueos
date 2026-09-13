@@ -134,23 +134,6 @@
 /* ── show, don't say ── */
 .hero-split{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center}
 @media (max-width:900px){.hero-split{grid-template-columns:1fr}}
-.wire{margin:0;max-width:100%}
-.wire svg{width:100%;height:auto;display:block}
-.wire figcaption{font-size:13px;color:var(--platinum);margin-top:10px}
-.wire .grid{opacity:.35}
-.wire .lines path{stroke-dasharray:6 8;animation:flow 1.6s linear infinite}
-.wire .lines path.out{animation-delay:.8s}
-.wire .node rect{fill:#1d1d1f;stroke:#424245}
-.wire .node text{fill:#f5f5f7}
-.wire .node.in{animation:pulse 5s ease-in-out infinite;animation-delay:calc(var(--i) * .5s)}
-.wire .node.out{animation:pulse 5s ease-in-out infinite;animation-delay:calc(2.5s + var(--i) * .5s)}
-.wire .core circle{fill:#0071e3}
-.wire .core text{fill:#fff}
-.wire .core .gate{fill:rgba(255,255,255,.85)}
-.wire .check text{fill:var(--platinum)}
-@keyframes flow{to{stroke-dashoffset:-28}}
-@keyframes pulse{0%,15%,100%{opacity:.55}7%{opacity:1}}
-@media (prefers-reduced-motion:reduce){.wire .lines path,.wire .node{animation:none}.wire .node{opacity:1}}
 .steps{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:18px 0 16px}
 @media (max-width:760px){.steps{grid-template-columns:repeat(3,1fr)}}
 .stp{background:transparent;border:1px solid var(--smoke);border-radius:14px;color:var(--platinum);padding:12px 8px;font:700 18px -apple-system,Segoe UI,Helvetica,Arial,sans-serif;cursor:pointer;text-align:left}
@@ -226,42 +209,120 @@
   <section class="tight" id="connects">
     <div class="eyebrow">What it connects to</div>
     <h2>Connect once. Act after your yes.</h2>
-   <figure class="wire" aria-label="What RevenueOS connects to and what it does">
-    <svg viewBox="0 0 560 420" role="img">
+   <figure class="wire">
+    <svg class="wide" viewBox="0 0 1020 250" role="img"
+      aria-label="The loop: RevenueOS reads your connected accounts, finds what costs money, waits for your approval, makes exactly the change you approved, then measures it before and after; what it measured ranks what comes next.">
       <defs>
-        <linearGradient id="flow" x1="0" x2="1"><stop offset="0" stop-color="#0071e3" stop-opacity=".1"/><stop offset="1" stop-color="#0071e3"/></linearGradient>
+        <marker id="wa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" class="head"/>
+        </marker>
+        <marker id="wab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" class="head go"/>
+        </marker>
       </defs>
-      <g class="grid" stroke="#2c2c2e" stroke-width="1">
-        <path d="M0 70H560M0 140H560M0 210H560M0 280H560M0 350H560M70 0V420M140 0V420M210 0V420M280 0V420M350 0V420M420 0V420M490 0V420"/>
+
+      <g class="edge">
+        <line x1="175" y1="79" x2="215" y2="79" marker-end="url(#wa)"/>
+        <line x1="385" y1="79" x2="425" y2="79" marker-end="url(#wa)"/>
+        <line x1="595" y1="79" x2="635" y2="79" marker-end="url(#wab)" class="go"/>
+        <line x1="805" y1="79" x2="845" y2="79" marker-end="url(#wa)"/>
+        <path d="M930 124 V 218 H 300 V 124" marker-end="url(#wa)"/>
       </g>
-      <g class="lines" fill="none" stroke="url(#flow)" stroke-width="2" stroke-linecap="round">
-        <path class="in" d="M120 60 C 200 60, 220 210, 280 210"/>
-        <path class="in" d="M120 130 C 200 130, 220 210, 280 210"/>
-        <path class="in" d="M120 210 L 280 210"/>
-        <path class="in" d="M120 290 C 200 290, 220 210, 280 210"/>
-        <path class="in" d="M120 360 C 200 360, 220 210, 280 210"/>
-        <path class="out" d="M280 210 C 340 210, 360 60, 440 60"/>
-        <path class="out" d="M280 210 C 340 210, 360 130, 440 130"/>
-        <path class="out" d="M280 210 L 440 210"/>
-        <path class="out" d="M280 210 C 340 210, 360 290, 440 290"/>
-        <path class="out" d="M280 210 C 340 210, 360 360, 440 360"/>
+
+      <g class="lab">
+        <text x="615" y="34" class="go">only after you approve</text>
+        <text x="615" y="203">what it measured ranks what comes next</text>
       </g>
-      <g class="nodes" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" text-anchor="middle">
-        <g class="node in" style="--i:0"><rect x="20" y="40" width="100" height="40" rx="12"/><text x="70" y="65">Your website</text></g>
-        <g class="node in" style="--i:1"><rect x="20" y="110" width="100" height="40" rx="12"/><text x="70" y="135">Stripe</text></g>
-        <g class="node in" style="--i:2"><rect x="6" y="190" width="114" height="40" rx="12"/><text x="63" y="215">Google · Meta</text></g>
-        <g class="node in" style="--i:3"><rect x="20" y="270" width="100" height="40" rx="12"/><text x="70" y="295">Mailbox</text></g>
-        <g class="node in" style="--i:4"><rect x="6" y="340" width="114" height="40" rx="12"/><text x="63" y="365">Site repo · WordPress</text></g>
-        <g class="core"><circle cx="280" cy="210" r="46"/><text x="280" y="204" font-weight="700" font-size="14">RevenueOS</text><text x="280" y="224" font-size="11" class="gate">waits for your yes</text></g>
-        <g class="node out" style="--i:0"><rect x="440" y="40" width="110" height="40" rx="12"/><text x="495" y="65">Site fix deployed</text></g>
-        <g class="node out" style="--i:1"><rect x="440" y="110" width="110" height="40" rx="12"/><text x="495" y="135">Campaign paused</text></g>
-        <g class="node out" style="--i:2"><rect x="440" y="190" width="110" height="40" rx="12"/><text x="495" y="215">Call booked</text></g>
-        <g class="node out" style="--i:3"><rect x="440" y="270" width="110" height="40" rx="12"/><text x="495" y="295">Invoice sent</text></g>
-        <g class="node out" style="--i:4"><rect x="440" y="340" width="110" height="40" rx="12"/><text x="495" y="365">Email drafted</text></g>
+
+      <g class="node">
+        <rect x="15" y="44" width="150" height="70" rx="14"/>
+        <text x="90" y="76" class="ttl">Reads</text>
+        <text x="90" y="97" class="sub">your connected accounts</text>
       </g>
-      <g class="check" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" text-anchor="middle"><text x="280" y="395">every result re-checked · before → after</text></g>
+      <g class="node">
+        <rect x="225" y="44" width="150" height="70" rx="14"/>
+        <text x="300" y="76" class="ttl">Finds</text>
+        <text x="300" y="97" class="sub">what costs you money</text>
+      </g>
+      <g class="node gate">
+        <rect x="435" y="44" width="150" height="70" rx="14"/>
+        <text x="510" y="76" class="ttl">Your yes</text>
+        <text x="510" y="97" class="sub">one click, or nothing</text>
+      </g>
+      <g class="node">
+        <rect x="645" y="44" width="150" height="70" rx="14"/>
+        <text x="720" y="76" class="ttl">Does</text>
+        <text x="720" y="97" class="sub">just what you approved</text>
+      </g>
+      <g class="node">
+        <rect x="855" y="44" width="150" height="70" rx="14"/>
+        <text x="930" y="76" class="ttl">Measures</text>
+        <text x="930" y="97" class="sub">before → after</text>
+      </g>
+
+      <g class="chip">
+        <text x="90" y="142">your website · Stripe</text>
+        <text x="90" y="159">Google · Meta · mailbox</text>
+        <text x="90" y="176">site repo · WordPress</text>
+        <text x="720" y="142">site fix deployed</text>
+        <text x="720" y="159">campaign paused · call booked</text>
+        <text x="720" y="176">invoice sent · email drafted</text>
+      </g>
     </svg>
-    <figcaption>Left: what you connect once. Right: what it does after you approve. Every arrow out is re-checked and written down.</figcaption>
+
+    <svg class="narrow" viewBox="0 0 320 620" role="img"
+      aria-label="The loop, top to bottom: RevenueOS reads your connected accounts, finds what costs money, waits for your approval, makes exactly the change you approved, then measures it before and after; what it measured ranks what comes next.">
+      <defs>
+        <marker id="na" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" class="head"/>
+        </marker>
+        <marker id="nab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" class="head go"/>
+        </marker>
+      </defs>
+
+      <g class="edge">
+        <line x1="190" y1="116" x2="190" y2="146" marker-end="url(#na)"/>
+        <line x1="190" y1="236" x2="190" y2="266" marker-end="url(#na)"/>
+        <line x1="190" y1="356" x2="190" y2="386" marker-end="url(#nab)" class="go"/>
+        <line x1="190" y1="476" x2="190" y2="506" marker-end="url(#na)"/>
+        <path d="M104 551 H 40 V 191 H 104" marker-end="url(#na)"/>
+      </g>
+
+      <g class="lab">
+        <text transform="translate(26 371) rotate(-90)">what it measured ranks what comes next</text>
+      </g>
+
+      <g class="node">
+        <rect x="104" y="36" width="200" height="70" rx="14"/>
+        <text x="204" y="68" class="ttl">Reads</text>
+        <text x="204" y="89" class="sub">website · Stripe · ads · mailbox</text>
+      </g>
+      <g class="node">
+        <rect x="104" y="156" width="200" height="70" rx="14"/>
+        <text x="204" y="188" class="ttl">Finds</text>
+        <text x="204" y="209" class="sub">what costs you money</text>
+      </g>
+      <g class="node gate">
+        <rect x="104" y="276" width="200" height="70" rx="14"/>
+        <text x="204" y="308" class="ttl">Your yes</text>
+        <text x="204" y="329" class="sub">one click, or nothing</text>
+      </g>
+      <g class="node">
+        <rect x="104" y="396" width="200" height="70" rx="14"/>
+        <text x="204" y="428" class="ttl">Does</text>
+        <text x="204" y="449" class="sub">site fix · pause · invoice · draft</text>
+      </g>
+      <g class="node">
+        <rect x="104" y="516" width="200" height="70" rx="14"/>
+        <text x="204" y="548" class="ttl">Measures</text>
+        <text x="204" y="569" class="sub">before → after</text>
+      </g>
+    </svg>
+
+    <figcaption>Five steps, one gate. Everything left of <b>Your yes</b> is reading and thinking, and
+      costs you nothing. Nothing to the right of it happens until you click, and every change that
+      does happen is re-checked against the live account and written down as before → after.</figcaption>
    </figure>
   </section>
 

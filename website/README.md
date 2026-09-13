@@ -33,7 +33,9 @@ relative (`/billing/checkout?tier=pro`, not an absolute URL), you must either:
 
 Either way, the billing host needs `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PRO`,
 `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_AGENCY`, `STRIPE_WEBHOOK_SECRET`, and
-`REVENUEOS_LICENSE_SECRET` set (see `src/revenueos/billing.py`'s module docstring), plus
+`REVENUEOS_LICENSE_SIGNING_KEY` (or `REVENUEOS_LICENSE_SIGNING_KEY_FILE`) set — the vendor's
+Ed25519 signing key; customers verify with the public key that ships in the package (see
+`src/revenueos/billing.py`'s module docstring) — plus
 `REVENUEOS_BILLING_SUCCESS_URL` / `REVENUEOS_BILLING_CANCEL_URL` for where Stripe should
 bounce the customer back to after checkout.
 

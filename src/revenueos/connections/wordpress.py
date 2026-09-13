@@ -88,3 +88,43 @@ def apply_fix(store: ConnectionStore, page_id: int, fix: dict[str, Any], client:
     if u.status_code != 200:
         raise RuntimeError(f"WordPress update: {u.status_code} {u.text[:200]}")
     return {"changed": True, "page": page_id, "link": u.json().get("link")}
+
+
+def _post_error(action: str, r: httpx.Response) -> str:
+    """`action` reads naturally after 'not allowed to': 'create posts', 'read this post'."""
+    if r.status_code == 401:
+        return f"WordPress refused the credentials ({r.status_code})"
+    if r.status_code == 403:
+        return f"this WordPress user is not allowed to {action} ({r.status_code})"
+    return f"WordPress {action}: {r.status_code} {r.text[:200]}"
+
+
+def create_post(store: ConnectionStore, title: str, content_html: str, *, status: str = "draft",
+                excerpt: str | None = None, client: httpx.Client | None = None) -> dict[str, Any]:
+    """Create a post (draft or published) via POST /wp-json/wp/v2/posts. Same auth and error
+    handling as apply_fix: a connection with only 'read' scope is refused before any request."""
+    conn = require(store, NAME, "write")
+    if "write" not in conn.scopes:
+        raise RuntimeError("this WordPress user cannot create posts")
+    c = _client(conn, client)
+    payload: dict[str, Any] = {"title": title, "content": content_html, "status": status}
+    if excerpt:
+        payload["excerpt"] = excerpt
+    r = c.post("/posts", json=payload)
+    if r.status_code not in (200, 201):
+        raise RuntimeError(_post_error("create posts", r))
+    p = r.json()
+    return {"id": p.get("id"), "link": p.get("link"), "status": p.get("status")}
+
+
+def get_post(store: ConnectionStore, post_id: int, client: httpx.Client | None = None) -> dict[str, Any]:
+    """Read one post back (context=edit, so a draft's raw content and status are visible to its author)."""
+    conn = require(store, NAME)
+    c = _client(conn, client)
+    r = c.get(f"/posts/{post_id}", params={"context": "edit"})
+    if r.status_code != 200:
+        raise RuntimeError(_post_error("read this post", r))
+    p = r.json()
+    return {"id": p.get("id"), "link": p.get("link"), "status": p.get("status"),
+            "title": (p.get("title") or {}).get("raw") or (p.get("title") or {}).get("rendered"),
+            "content": (p.get("content") or {}).get("raw") or (p.get("content") or {}).get("rendered") or ""}

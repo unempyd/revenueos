@@ -147,3 +147,64 @@ def test_details_are_json_serialisable_and_carry_the_state(workspace, store, onb
     assert d["objectives"][0]["id"] == oid
     assert set(d) >= {"pending_by_type", "approved_waiting", "measured", "failures", "blocked_sends",
                       "funnel", "results", "next_action", "messages_posted"}
+
+
+# ── convert: the heartbeat notices the clock and drafts the offer ─────────────
+def _measured_result(store, days_ago=3):
+    """An executed action with a measured outcome `days_ago` days ago — the pay-on-result clock."""
+    import pytest
+
+    aid = store.create_action("seo_opportunity", "SEO: missing description — /pricing", "…", dedupe_key="seo:conv")
+    store.set_action_status(aid, "executed")
+    ts = (datetime.now(UTC) - timedelta(days=days_ago)).isoformat(timespec="seconds")
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr("revenueos.store.now", lambda: ts)
+        store.record_outcome(aid, "measured", metric="meta_description_fixed", before_value=0, after_value=1)
+    return aid
+
+
+def test_heartbeat_reports_no_offer_before_anything_is_measured(workspace, store, onboarded):
+    r = _run(workspace, store, onboarded)
+    assert r.details["offer"]["state"] == "none"
+    assert r.details["offer"]["action_id"] is None
+    assert "offer:" not in r.summary
+    assert "tenant_offers" not in r.details
+
+
+def test_heartbeat_drafts_the_offer_once_and_tells_the_operator(workspace, store, onboarded, monkeypatch):
+    monkeypatch.delenv("REVENUEOS_PAYMENT_LINK_PRO", raising=False)
+    store.create_objective("Fill empty chairs")
+    _measured_result(store, days_ago=3)
+
+    r1 = _run(workspace, store, onboarded)
+    offer = r1.details["offer"]
+    assert offer["state"] == "clock_running" and offer["days_left"] == 11
+    assert offer["action_id"] is not None
+    assert " · offer: clock_running" in r1.summary
+    assert r1.actions_created == 1  # the draft, and nothing else
+
+    notes = [m for m in store.list_messages("operator", unread_only=True) if "Pro offer drafted" in m["subject"]]
+    assert len(notes) == 1
+    assert notes[0]["subject"] == (f"Acme Scheduling: first measured result on {offer['first_result_at'][:10]}; "
+                                  f"Pro offer drafted as action [{offer['action_id']}]")
+
+    r2 = _run(workspace, store, onboarded)  # idempotent: no second draft, no second note
+    assert r2.details["offer"]["action_id"] is None
+    assert r2.actions_created == 0
+    assert len([a for a in store.list_actions("pending") if (a["context"] or {}).get("kind") == "offer"]) == 1
+    assert len([m for m in store.list_messages("operator") if "Pro offer drafted" in m["subject"]]) == 1
+    json.dumps(r2.as_json())  # the orchestrator still parses the line
+
+
+def test_heartbeat_measures_an_executed_offer_from_the_billing_workers_last_read(workspace, store, onboarded):
+    from revenueos import convert
+
+    _measured_result(store, days_ago=2)
+    aid = convert.ensure_offer_action(workspace, store, onboarded, customer_email="owner@acme.example")
+    store.set_action_status(aid, "executed")
+    convert.write_customers_export(workspace, [{"email": "owner@acme.example", "customer": "cus_9", "subscription": "sub_9"}])
+
+    r = _run(workspace, store, onboarded)
+    assert r.details["offer"]["offers_measured"] == 1
+    o = store.latest_outcome(aid)
+    assert o["status"] == "measured" and o["metric"] == "subscribed" and o["after_value"] == 1.0

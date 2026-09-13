@@ -6,7 +6,8 @@
 #   fly auth login                      # the only interactive step (browser)
 #   deploy/fly-billing.sh               # everything else
 #
-# Reads: ~/.revenueos-stripe-key, ~/.revenueos-stripe-prices, ~/.revenueos-license-secret
+# Reads: ~/.revenueos-stripe-key, ~/.revenueos-stripe-prices, ~/.revenueos-license-signing-key
+#        (and ~/.revenueos-license-secret, if you still have customers on legacy HMAC keys)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 APP="${REVENUEOS_FLY_APP:-revenueos-billing}"
@@ -18,7 +19,8 @@ need fly; need curl; need python3
 fly auth whoami >/dev/null 2>&1 || { echo "run: fly auth login" >&2; exit 2; }
 
 STRIPE_SECRET_KEY="$(tr -d '[:space:]' < ~/.revenueos-stripe-key)"
-LICENSE_SECRET="$(tr -d '[:space:]' < ~/.revenueos-license-secret)"
+SIGNING_KEY="$(tr -d '[:space:]' < ~/.revenueos-license-signing-key)"   # Ed25519 seed: signs every new key
+LICENSE_SECRET="$(tr -d '[:space:]' < ~/.revenueos-license-secret 2>/dev/null || true)"  # legacy HMAC keys only
 # shellcheck disable=SC1090
 source <(sed 's/^/export /' ~/.revenueos-stripe-prices)
 PANEL_PASSWORD="${REVENUEOS_PANEL_PASSWORD:-$(openssl rand -hex 16)}"
@@ -28,6 +30,7 @@ fly volumes list --app "$APP" --json 2>/dev/null | grep -q revenueos_data || fly
 
 fly secrets set --app "$APP" --stage \
   REVENUEOS_PANEL_PASSWORD="$PANEL_PASSWORD" \
+  REVENUEOS_LICENSE_SIGNING_KEY="$SIGNING_KEY" \
   REVENUEOS_LICENSE_SECRET="$LICENSE_SECRET" \
   STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" \
   STRIPE_PRICE_PRO="$STRIPE_PRICE_PRO" STRIPE_PRICE_BUSINESS="$STRIPE_PRICE_BUSINESS" STRIPE_PRICE_AGENCY="$STRIPE_PRICE_AGENCY" \

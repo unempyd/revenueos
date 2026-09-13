@@ -7,21 +7,26 @@ subscriptions that unlock tiers via a signed licence key. This module has two au
     which gate a feature behind a tier the install has (or hasn't) unlocked.
   * the **vendor** — `revenueos license issue` (mint a key), `revenueos billing checkout`
     (start a Stripe Checkout session), and `handle_webhook` (process Stripe events into
-    licence keys). These need `REVENUEOS_LICENSE_SECRET` / `STRIPE_SECRET_KEY`, which only
+    licence keys). These need the Ed25519 signing key / `STRIPE_SECRET_KEY`, which only
     the vendor holds.
 
-Licence keys are `<base64url json payload>.<hmac-sha256 hex>`, verified with a single
-shared secret (`REVENUEOS_LICENSE_SECRET`). This is a symmetric scheme, not a real
-public/private signature: the same secret that issues a key also verifies it. For a
-self-hosted product that is a deliberate, documented simplification — the customer's
-install is shipped with that secret as a config value (baked into their deployment, not
-committed to source) so it can verify keys offline. A customer who extracts the secret
-from their own install could mint their own keys; the mitigation is that doing so gains
-them nothing they don't already have (the product is self-hosted and open), and the
-"real" enforcement point is the vendor's Stripe subscription — a licence key just mirrors
-what Stripe already believes. If that threat model ever matters, swap the HMAC for
-Ed25519 (private key at the vendor, public key shipped to customers) without changing
-this module's public functions.
+Licence keys are `<base64url json payload>.<base64url signature>`, signed with the
+vendor's **Ed25519 private key** and verified with the public key that ships in this
+module (`LICENSE_PUBLIC_KEYS`, a list so keys can rotate). The payload carries
+`alg: "ed25519"` and `kid` (first 8 hex of the sha256 of the public key) alongside the
+tier, email, issued_at and expires_at. That is the whole point of the asymmetric scheme:
+a self-hosted customer verifies the key they paid for **with no secret at all**, and
+holding what it takes to verify does not let them mint keys.
+
+Signing key (vendor only): `REVENUEOS_LICENSE_SIGNING_KEY` (base64 of the raw 32-byte
+seed) or `REVENUEOS_LICENSE_SIGNING_KEY_FILE` (a path to a file holding that base64).
+A self-hoster running their own vendor side can add their own public key with
+`REVENUEOS_LICENSE_PUBLIC_KEY` (base64), which extends `LICENSE_PUBLIC_KEYS`.
+
+Legacy: keys minted before this change are `<payload>.<hmac-sha256 hex>` with no `alg`
+in the payload. `verify_license` still accepts those, but only when
+`REVENUEOS_LICENSE_SECRET` is set (i.e. on the vendor's own installs). Issuing never
+falls back to HMAC.
 
 Never log or print a licence key except where explicitly asked for one (`license issue`,
 `license show`) — `handle_webhook`'s return value carries a key back to its caller, which
@@ -47,10 +52,20 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from .paths import Workspace
 
 STRIPE_API_BASE = "https://api.stripe.com/v1"
+
+# The vendor's licence signing public keys, base64 of the raw 32 bytes. Public by design —
+# every install verifies with these and nothing here can mint a key. A list so a key can be
+# rotated: add the new key, keep the old one until the last key it signed has expired.
+LICENSE_PUBLIC_KEYS: list[str] = [
+    "simayVdMI9AEWXkLdRn6wNo2CKJ8iVKEtk8lNN1E7Rw=",  # kid 17d20eb8, generated 2026-09-13
+]
 
 # How long a licence minted from a webhook stays valid before the next renewal webhook
 # (subscription cycle) refreshes it. Comfortably longer than a month so a few days of
@@ -148,12 +163,68 @@ def _b64url_decode(s: str) -> bytes:
 
 
 # ── licence keys ─────────────────────────────────────────────────────────────
+ED25519_ALG = "ed25519"
+LEGACY_ALG = "hmac-sha256"
+
+
+def key_id(public_key_b64: str | bytes) -> str:
+    """The `kid` a payload carries: first 8 hex of sha256 over the raw public key bytes."""
+    raw = public_key_b64 if isinstance(public_key_b64, bytes) else base64.b64decode(public_key_b64)
+    return hashlib.sha256(raw).hexdigest()[:8]
+
+
+def _b64_key_bytes(value: str) -> bytes:
+    """Decodes a base64 (standard or url-safe, padded or not) 32-byte key."""
+    s = value.strip()
+    padding = "=" * (-len(s) % 4)
+    try:
+        return base64.b64decode(s + padding) if "-" not in s and "_" not in s else base64.urlsafe_b64decode(s + padding)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("licence key material is not valid base64") from exc
+
+
+def signing_key() -> Ed25519PrivateKey | None:
+    """The vendor's Ed25519 private key from $REVENUEOS_LICENSE_SIGNING_KEY (base64 raw
+    32-byte seed) or the file named by $REVENUEOS_LICENSE_SIGNING_KEY_FILE. None when
+    neither is configured — every customer install. Never logged or printed."""
+    raw = os.environ.get("REVENUEOS_LICENSE_SIGNING_KEY")
+    if not raw:
+        path = os.environ.get("REVENUEOS_LICENSE_SIGNING_KEY_FILE")
+        if not path:
+            return None
+        try:
+            raw = Path(path).expanduser().read_text(encoding="utf-8")
+        except OSError:
+            return None
+    try:
+        return Ed25519PrivateKey.from_private_bytes(_b64_key_bytes(raw))
+    except (ValueError, TypeError):
+        return None
+
+
+def public_keys() -> list[tuple[str, Ed25519PublicKey]]:
+    """Every (kid, key) this install will accept: the shipped `LICENSE_PUBLIC_KEYS` plus
+    $REVENUEOS_LICENSE_PUBLIC_KEY for a self-hoster running their own vendor side."""
+    out: list[tuple[str, Ed25519PublicKey]] = []
+    extra = os.environ.get("REVENUEOS_LICENSE_PUBLIC_KEY")
+    candidates = [*LICENSE_PUBLIC_KEYS, extra] if extra else list(LICENSE_PUBLIC_KEYS)
+    for candidate in candidates:
+        try:
+            raw = _b64_key_bytes(candidate)
+            out.append((key_id(raw), Ed25519PublicKey.from_public_bytes(raw)))
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
 @dataclass(frozen=True)
 class License:
     tier: Tier
     customer_email: str
     expires_at: str  # ISO-8601
     issued_at: str = ""
+    alg: str = ""  # "ed25519", or "hmac-sha256" for a legacy key; "" for community
+    kid: str = ""  # which signing key verified it
 
     def is_expired(self, *, now: datetime | None = None) -> bool:
         return _parse_iso(self.expires_at) < (now or datetime.now(UTC))
@@ -163,48 +234,99 @@ def _community_license() -> License:
     return License(tier=Tier.community, customer_email="", expires_at="9999-12-31T00:00:00+00:00", issued_at="")
 
 
-def issue_license(tier: Tier, customer_email: str, expires_at: str | datetime, secret: str) -> str:
-    """Mint `<base64url payload>.<hmac-sha256 hex>`. Vendor-side; needs the vendor secret."""
+def issue_license(tier: Tier, customer_email: str, expires_at: str | datetime, secret: str | None = None) -> str:
+    """Mint `<base64url payload>.<base64url ed25519 signature>`. Vendor-side: needs the
+    signing key (`REVENUEOS_LICENSE_SIGNING_KEY`/`_FILE`) and raises when it is missing.
+
+    `secret` is the old HMAC secret; it is accepted so existing callers keep working and
+    is ignored — issuing never falls back to HMAC. Never log the returned key."""
+    private = signing_key()
+    if private is None:
+        raise RuntimeError(
+            "no licence signing key configured: set REVENUEOS_LICENSE_SIGNING_KEY (base64 raw 32-byte seed) "
+            "or REVENUEOS_LICENSE_SIGNING_KEY_FILE (path to a file holding it). Only the vendor issues licences."
+        )
     tier = Tier(tier)
     expires_str = expires_at.isoformat(timespec="seconds") if isinstance(expires_at, datetime) else str(expires_at)
+    pub_raw = private.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
+    )
     payload = {
+        "alg": ED25519_ALG,
+        "kid": key_id(pub_raw),
         "tier": tier.value,
         "customer_email": customer_email,
         "expires_at": expires_str,
         "issued_at": now_iso(),
     }
     payload_b64 = _b64url_encode(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-    sig = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
-    return f"{payload_b64}.{sig}"
+    sig = private.sign(payload_b64.encode("ascii"))
+    return f"{payload_b64}.{_b64url_encode(sig)}"
 
 
-def verify_license(key: str, secret: str) -> License | None:
-    """Checks the HMAC signature and expiry. Returns None on any malformed/tampered/expired key."""
-    if not key or "." not in key:
-        return None
-    payload_b64, _, sig = key.partition(".")
-    expected = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, sig):
-        return None
+def _license_from_payload(payload: dict[str, Any], *, alg: str, kid: str) -> License | None:
     try:
-        payload = json.loads(_b64url_decode(payload_b64))
         tier = Tier(payload["tier"])
         customer_email = str(payload["customer_email"])
         expires_at = str(payload["expires_at"])
         issued_at = str(payload.get("issued_at", ""))
         expired = _parse_iso(expires_at) < datetime.now(UTC)
-    except (KeyError, TypeError, ValueError, binascii.Error, UnicodeDecodeError):
+    except (KeyError, TypeError, ValueError):
         return None
     if expired:
         return None
-    return License(tier=tier, customer_email=customer_email, expires_at=expires_at, issued_at=issued_at)
+    return License(tier=tier, customer_email=customer_email, expires_at=expires_at, issued_at=issued_at,
+                   alg=alg, kid=kid)
+
+
+def verify_license(key: str, secret: str | None = None) -> License | None:
+    """Checks the signature and expiry. Returns None on any malformed/tampered/expired key.
+
+    Ed25519 first, against every key `public_keys()` returns — this needs no secret, which
+    is the point: a customer verifies the key they paid for offline. A key whose payload
+    carries no `alg` is a legacy HMAC key and is only accepted when the vendor secret is at
+    hand (`secret`, else $REVENUEOS_LICENSE_SECRET)."""
+    if not key or "." not in key:
+        return None
+    payload_b64, _, sig = key.partition(".")
+    try:
+        payload = json.loads(_b64url_decode(payload_b64))
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    alg = str(payload.get("alg") or "")
+    if alg:
+        if alg != ED25519_ALG:
+            return None
+        try:
+            signature = _b64url_decode(sig)
+        except (binascii.Error, ValueError):
+            return None
+        for kid, pub in public_keys():
+            try:
+                pub.verify(signature, payload_b64.encode("ascii"))
+            except InvalidSignature:
+                continue
+            return _license_from_payload(payload, alg=ED25519_ALG, kid=kid)
+        return None
+
+    # legacy HMAC key: only the vendor (who holds the old shared secret) can verify one
+    secret = secret if secret is not None else os.environ.get("REVENUEOS_LICENSE_SECRET")
+    if not secret:
+        return None
+    expected = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, sig):
+        return None
+    return _license_from_payload(payload, alg=LEGACY_ALG, kid="")
 
 
 def load_license(ws: Workspace) -> License:
-    """Reads data/license.json (`{"key": ...}`) and verifies it against
-    $REVENUEOS_LICENSE_SECRET. Community tier when there is no file, no secret configured,
-    or the key fails verification (bad signature, tampered, expired) — always fails closed
-    to the free tier rather than failing open."""
+    """Reads data/license.json (`{"key": ...}`) and verifies it with the shipped public
+    keys — no secret required on the customer's install. Community tier when there is no
+    file or the key fails verification (bad signature, tampered, expired) — always fails
+    closed to the free tier rather than failing open."""
     path = ws.data / "license.json"
     if not path.exists():
         return _community_license()
@@ -213,10 +335,9 @@ def load_license(ws: Workspace) -> License:
     except (OSError, json.JSONDecodeError):
         return _community_license()
     key = raw.get("key") if isinstance(raw, dict) else None
-    secret = os.environ.get("REVENUEOS_LICENSE_SECRET")
-    if not key or not secret:
+    if not key:
         return _community_license()
-    return verify_license(key, secret) or _community_license()
+    return verify_license(key) or _community_license()
 
 
 def require_tier(ws: Workspace, minimum: Tier) -> str | None:
@@ -378,7 +499,7 @@ def handle_webhook(
     sig_header: str,
     *,
     webhook_secret: str,
-    license_secret: str,
+    license_secret: str | None = None,
     price_ids: dict[Tier, str],
     ws: Workspace,
 ) -> dict[str, Any]:
@@ -389,6 +510,9 @@ def handle_webhook(
     `customer.subscription.deleted` appends a revocation row. Returns
     `{"ok": True, "tier":..., "email":..., "key":...}` or `{"ok": False, "error":...}`.
     Never logs the key — it is only ever returned to the caller.
+
+    Keys are Ed25519-signed, so the host running this needs the signing key configured;
+    `license_secret` is the retired HMAC secret and is ignored.
     """
     if not verify_webhook_signature(payload, sig_header, webhook_secret):
         return {"ok": False, "error": "invalid webhook signature"}
@@ -411,7 +535,10 @@ def handle_webhook(
         if tier is None:
             return {"ok": False, "error": "could not map event to a tier (unknown price id / metadata)"}
         expires_at = (datetime.now(UTC) + _WEBHOOK_LICENSE_VALIDITY).isoformat(timespec="seconds")
-        key = issue_license(tier, email, expires_at, license_secret)
+        try:
+            key = issue_license(tier, email, expires_at, license_secret)
+        except RuntimeError as exc:
+            return {"ok": False, "error": str(exc)}
         stripe_subscription = obj.get("subscription") if event_type == "checkout.session.completed" else obj.get("id")
         _append_license_row(
             ws,
@@ -536,15 +663,13 @@ def billing_http(path: str, method: str, body: bytes, headers: dict[str, str], w
 
     if route == "/billing/webhook" and verb == "POST":
         webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
-        license_secret = os.environ.get("REVENUEOS_LICENSE_SECRET")
-        if not webhook_secret or not license_secret:
+        if not webhook_secret or signing_key() is None:
             return (500, "application/json", json.dumps({"ok": False, "error": "billing is not configured on this server"}))
         sig_header = _header(headers, "Stripe-Signature") or ""
         result = handle_webhook(
             body,
             sig_header,
             webhook_secret=webhook_secret,
-            license_secret=license_secret,
             price_ids=_price_ids_from_env(),
             ws=ws,
         )
@@ -591,6 +716,8 @@ def _cmd_license_show(args: argparse.Namespace) -> int:
     print(f"tier:    {lic.tier.value}")
     print(f"email:   {lic.customer_email or '(none — community)'}")
     print(f"expires: {lic.expires_at}")
+    print(f"alg:     {lic.alg or '(unsigned — community)'}")
+    print(f"kid:     {lic.kid or '(none)'}")
     print("features:")
     for f in features_for(lic.tier):
         print(f"  - {f}")
@@ -598,29 +725,32 @@ def _cmd_license_show(args: argparse.Namespace) -> int:
 
 
 def _cmd_license_install(args: argparse.Namespace) -> int:
+    """Verifies the key *before* writing it: an install never stores a key it cannot verify."""
     ws = _workspace_from_args(args)
+    lic = verify_license(args.key)
+    if lic is None or lic.tier is Tier.community:
+        print(
+            "that licence key did not verify, so nothing was installed: it is malformed, expired, or was "
+            "not signed by a key this version of RevenueOS trusts. Check you pasted the whole key from your "
+            "confirmation email, and that this install is up to date. This install stays on Community.",
+            file=sys.stderr,
+        )
+        return 2
     ws.data.mkdir(parents=True, exist_ok=True)
     (ws.data / "license.json").write_text(json.dumps({"key": args.key}), encoding="utf-8")
-    lic = load_license(ws)
-    if lic.tier is Tier.community:
-        print(
-            "licence installed, but it did not verify as a paid tier — check "
-            "REVENUEOS_LICENSE_SECRET is configured on this install and the key is current. "
-            "Running as Community."
-        )
-    else:
-        print(f"licence installed: {TIER_LABELS[lic.tier]} for {lic.customer_email}, expires {lic.expires_at}")
+    print(f"licence installed: {TIER_LABELS[lic.tier]} for {lic.customer_email}, expires {lic.expires_at} "
+          f"({lic.alg}{', kid ' + lic.kid if lic.kid else ''})")
     return 0
 
 
 def _cmd_license_issue(args: argparse.Namespace) -> int:
-    secret = os.environ.get("REVENUEOS_LICENSE_SECRET")
-    if not secret:
-        print("REVENUEOS_LICENSE_SECRET is not set (the vendor secret is required to issue licences)", file=sys.stderr)
-        return 2
     tier = Tier(args.tier)
     expires_at = (datetime.now(UTC) + timedelta(days=args.days)).isoformat(timespec="seconds")
-    key = issue_license(tier, args.email, expires_at, secret)
+    try:
+        key = issue_license(tier, args.email, expires_at)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     print(key)
     return 0
 
@@ -658,7 +788,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     s.add_argument("key")
     s.set_defaults(fn=_cmd_license_install)
 
-    s = lic_sub.add_parser("issue", help="issue a licence key (vendor use; needs REVENUEOS_LICENSE_SECRET)")
+    s = lic_sub.add_parser("issue", help="issue a licence key (vendor use; needs REVENUEOS_LICENSE_SIGNING_KEY[_FILE])")
     s.add_argument("--tier", required=True, choices=[t.value for t in Tier])
     s.add_argument("--email", required=True)
     s.add_argument("--days", type=int, default=30)

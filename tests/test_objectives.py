@@ -134,15 +134,15 @@ def test_unknown_status_and_kind_are_refused(store):
         store.add_objective_event(oid, "vibes", "nope")
 
 
-MANDATE = """RevenueOS — Non-Negotiable Commercial Operating Mandate
+MANDATE = """Acme Scheduling — Revenue Objective
 
 Purpose
 
-RevenueOS is not to be treated as a static software repository.
+The objective below governs every decision.
 
 Non-Negotiable Commercial Objective
 
-The primary responsibility of the RevenueOS agent organisation is:
+The primary responsibility of the team is:
 
 Generate real revenue through RevenueOS by finding businesses for which the system can create measurable commercial value.
 
@@ -157,7 +157,7 @@ def test_heartbeat_derives_the_objective_from_the_mandate_file(workspace, store,
     assert read_mandate(workspace) is None
     (workspace.root / "REVENUEOS_OPERATOR_MANDATE.md").write_text(MANDATE)
     m = read_mandate(workspace)
-    assert m["title"] == "RevenueOS — Non-Negotiable Commercial Operating Mandate"
+    assert m["title"] == "Acme Scheduling — Revenue Objective"
     assert m["objective"].startswith("Generate real revenue through RevenueOS")
 
     r = run_worker("heartbeat", workspace, store, onboarded, None)

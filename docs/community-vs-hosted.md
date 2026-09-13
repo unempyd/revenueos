@@ -76,7 +76,9 @@ Be precise about the difference, because it matters to what you're buying:
 When RevenueOS has measured a result you approved, you get a Stripe payment link for the
 tier you asked for; after Stripe confirms the payment, a signed licence key is emailed to
 you and `revenueos license install <key>` applies it to your workspace, verified offline
-against the vendor's signing secret. (The `/billing/checkout?tier=…` endpoint and the
+against the vendor's public key, which ships with RevenueOS — your install needs no secret
+of ours to confirm the licence you paid for, and nothing it holds could mint one. (The
+`/billing/checkout?tier=…` endpoint and the
 Stripe webhook that issues keys exist in the code for a self-serve flow; they are not
 the way early-access customers pay today.) `revenueos license show`
 reports your current tier and every feature it unlocks. See

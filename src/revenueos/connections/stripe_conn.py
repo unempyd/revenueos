@@ -89,6 +89,27 @@ def summary(conn: Connection, client: httpx.Client | None = None, days: int = 30
     }
 
 
+def paying_customers(conn: Connection, client: httpx.Client | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    """Who is actually paying, by email: every active subscription with its customer expanded.
+
+    Read-only. Used by the billing worker to turn a real payment into a licence without a hosted
+    webhook, and to measure whether an offer converted. Subscriptions whose customer has no email
+    are returned with `email: None` — never guessed."""
+    c = _client(conn, client)
+    subs = c.get("/subscriptions", params={"status": "active", "limit": limit, "expand[]": "data.customer"}).json().get("data", [])
+    out: list[dict[str, Any]] = []
+    for s in subs:
+        cust = s.get("customer")
+        cust_id = cust.get("id") if isinstance(cust, dict) else (cust if isinstance(cust, str) else None)
+        email = (cust.get("email") if isinstance(cust, dict) else None) or s.get("customer_email")
+        items = (s.get("items") or {}).get("data") or []
+        period = s.get("current_period_start") or (items[0].get("current_period_start") if items else None)
+        out.append({"email": (email or "").strip().lower() or None, "customer": cust_id, "subscription": s.get("id"),
+                    "status": s.get("status"), "current_period_start": period,
+                    "livemode": bool(s.get("livemode", conn.meta.get("livemode")))})
+    return out
+
+
 def send_invoice(store: ConnectionStore, *, email: str, name: str, description: str, amount: float, currency: str = "usd",
                  days_until_due: int = 14, send: bool = True, client: httpx.Client | None = None) -> dict[str, Any]:
     """The 'send the invoice' executor. Creates the customer if needed, a draft invoice with one line, then

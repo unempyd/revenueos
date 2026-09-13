@@ -16,8 +16,8 @@ def _stripe(session: dict) -> httpx.Client:
     return httpx.Client(base_url="https://api.stripe.com", transport=httpx.MockTransport(handler))
 
 
-def test_success_page_shows_issued_licence(workspace):
-    key = billing.issue_license(billing.Tier.pro, "buyer@example.com", "2027-01-01T00:00:00+00:00", "s3cret")
+def test_success_page_shows_issued_licence(workspace, vendor_keys):
+    key = billing.issue_license(billing.Tier.pro, "buyer@example.com", "2027-01-01T00:00:00+00:00")
     (workspace.data / "licenses.jsonl").write_text(json.dumps({
         "issued_at": "2026-09-12T13:00:00+00:00", "tier": "pro", "email": "buyer@example.com", "key": key,
         "stripe_customer": "cus_123", "stripe_subscription": "sub_123"}) + "\n")

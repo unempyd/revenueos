@@ -34,11 +34,23 @@ class BillingWorker:
         s = stripe_conn.summary(conn)
         for k in ("customers", "active_subscriptions", "mrr", "revenue_30d", "charges_30d", "open_invoices", "open_invoice_total"):
             store.record_metric(f"stripe_{k}", float(s.get(k) or 0), currency=s.get("currency"), livemode=s.get("livemode"))
+        # Payment → licence, without a hosted webhook: who is paying, who has no key yet.
+        # Nothing is sent here; `deliver_licenses` only mints the key and drafts the delivery.
+        from .. import convert
+
+        paying = stripe_conn.paying_customers(conn)
+        with_email = [c for c in paying if c.get("email")]
+        store.record_metric("paying_customers", float(len(with_email)), livemode=s.get("livemode"))
+        convert.write_customers_export(ws, paying)
+        lic = convert.deliver_licenses(ws, store, with_email, run_id=run_id)
         cur = (s.get("currency") or "usd").upper()
+        tail = (f" · {len(with_email)} paying customer(s), {lic['issued']} licence(s) issued, "
+                f"{lic['actions_created']} delivery draft(s)" if paying else "")
         return WorkerResult(ok=True, summary=(f"Stripe ({'live' if s.get('livemode') else 'test'}): {s['customers']} customers · "
                                               f"{s['active_subscriptions']} active subscriptions · MRR {s['mrr']:.2f} {cur} · "
-                                              f"revenue 30d {s['revenue_30d']:.2f} {cur} · {s['open_invoices']} open invoices"),
-                            details=s)
+                                              f"revenue 30d {s['revenue_30d']:.2f} {cur} · {s['open_invoices']} open invoices" + tail),
+                            actions_created=lic["actions_created"],
+                            details={**s, "paying_customers": len(with_email), "licenses": lic})
 
 
 class AnalyticsWorker:

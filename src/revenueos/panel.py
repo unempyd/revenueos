@@ -37,32 +37,37 @@ except ImportError:  # pragma: no cover
     load_license = None  # type: ignore[assignment]
 
 STYLE = """
-/* Dark-first, matching website/design.css — the marketing site is a black
-   product stage, so the dashboard a customer opens after installing must not
-   arrive as a white app. Light is honoured only when explicitly preferred. */
+/* One design language with website/design.css: the site is a black product stage
+   with no light mode, so the dashboard a customer opens after installing is the
+   same stage. The OS preference does not flip it — a customer who clicks through
+   from the site must not land in a white app. Light is still available, but only
+   when a person asks for it by name (data-theme="light" on the root). */
 :root{
-  color-scheme:dark light;
+  color-scheme:dark;
   --bg:#000000; --surface:#1d1d1f; --surface-2:#111113; --canvas:#000000;
   --ink:#f5f5f7; --ink-2:#a1a1a6; --ink-3:#86868b;
   --line:#424245; --line-soft:#2c2c2e;
-  --accent:#2997ff; --accent-ink:#000000;
-  --orange:#ff8f3f;
-  --ok:#30d158; --pend:#ffd60a;
+  --accent:#0071e3; --accent-ink:#ffffff;   /* the site's single filled CTA colour */
+  --focus:#2997ff;                          /* halo: rings and edges, never a fill */
+  --orange:#f56900;                         /* eyebrows only, as on the site */
+  --ok:#30d158; --pend:#ffd60a; --bad:#ff453a;
   --chrome:rgba(29,29,31,.72);
   --r-card:28px; --r-btn:36px; --r-pill:980px; --r-field:10px;
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px;
   --ease:cubic-bezier(.32,.72,0,1);
   --fast:140ms; --base:280ms;
 }
-@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+:root[data-theme="light"]{
+  color-scheme:light;
   --bg:#ffffff; --surface:#ffffff; --surface-2:#f5f5f7; --canvas:#f5f5f7;
   --ink:#1d1d1f; --ink-2:#6e6e73; --ink-3:#86868b;
   --line:#d2d2d7; --line-soft:#e8e8ed;
   --accent:#0071e3; --accent-ink:#ffffff;
+  --focus:#0071e3;
   --orange:#f56900;
-  --ok:#00845a; --pend:#8a6d00;
+  --ok:#00845a; --pend:#8a6d00; --bad:#b00020;
   --chrome:rgba(255,255,255,.72);
-}}
+}
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -96,6 +101,19 @@ nav a:hover{color:var(--ink);background:var(--surface-2)}
 nav a:active{transform:scale(.96)}
 
 main,.wrap{width:100%}
+
+/* Content links. Only nav links were styled, so a source URL inside a row fell back
+   to the browser's own blue-on-black (and visited purple), the one element on the
+   page not speaking the product's language. Halo blue, as on the site; the fill blue
+   stays reserved for a button. */
+.row a,.t a,p a,td a{
+  color:var(--focus); text-decoration:none;
+  border-bottom:1px solid color-mix(in srgb,var(--focus) 40%,transparent);
+  overflow-wrap:anywhere;
+  transition:border-color var(--fast) var(--ease);
+}
+.row a:visited,.t a:visited,p a:visited,td a:visited{color:var(--focus)}
+.row a:hover,.t a:hover,p a:hover,td a:hover{border-bottom-color:var(--focus)}
 h1{
   margin:0 0 var(--sp-1);
   font-size:clamp(30px,5vw,40px); font-weight:700; line-height:1.08; letter-spacing:-.028em;
@@ -112,6 +130,16 @@ h2{margin:var(--sp-10) 0 var(--sp-3);font-size:21px;font-weight:600;line-height:
   font-variant-numeric:tabular-nums; font-feature-settings:"numr"; letter-spacing:0;
   animation:rise var(--base) var(--ease) both;
 }
+/* The same card carrying prose, not a column of figures: `pre` is right for the
+   numbers, where alignment is load-bearing, and wrong for a sentence — it pushed
+   the objective line off the card's right edge instead of wrapping. */
+.brief.note{
+  white-space:pre-wrap; overflow-wrap:anywhere;
+  font:400 15px/1.6 var(--sans,-apple-system,BlinkMacSystemFont,system-ui,sans-serif);
+  letter-spacing:-.016em;
+}
+.brief.note b{font-weight:600}
+.brief.note small{display:block;margin-top:var(--sp-2);color:var(--ink-3);font-size:13px}
 
 /* ── action rows ── */
 .row{
@@ -135,7 +163,7 @@ h2{margin:var(--sp-10) 0 var(--sp-3);font-size:21px;font-weight:600;line-height:
 form{display:inline-flex;margin:0 var(--sp-2) var(--sp-2) 0}
 .chip{margin-right:10px}
 .agents{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px} .agentchip{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2)} .agentchip b{font-weight:600;color:var(--ink)} .agentchip.ok{border-color:var(--ok)} .agentchip.bad{border-color:#b00020}
-.stepper{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 var(--sp-5)} .step{padding:6px 14px;border-radius:var(--r-pill);border:1px solid var(--line);color:var(--ink-3);font-size:13px} .step.done{color:var(--ok);border-color:var(--ok)} .step.on{color:var(--accent);border-color:var(--accent)} .step.ok{color:var(--ok);border-color:var(--ok)} .step.bad{color:#b00020;border-color:#b00020} #feed{max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word} a.cta{display:inline-block;padding:10px 18px;border-radius:var(--r-btn);background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600}
+.stepper{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 var(--sp-5)} .step{padding:6px 14px;border-radius:var(--r-pill);border:1px solid var(--line);color:var(--ink-3);font-size:13px} .step.done{color:var(--ok);border-color:var(--ok)} .step.on{color:var(--focus);border-color:var(--focus)} .step.ok{color:var(--ok);border-color:var(--ok)} .step.bad{color:var(--bad);border-color:var(--bad)} #feed{max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word} a.cta{display:inline-block;padding:10px 18px;border-radius:var(--r-btn);background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600}
 form.stack{display:block;flex:none;width:100%;margin:0 0 var(--sp-6)} form.stack input,form.stack textarea{width:100%;box-sizing:border-box} form.once{padding:var(--sp-5);border:1px solid var(--line-soft);border-radius:var(--r-card);background:var(--surface)}
 button{
   font:inherit; font-size:14px; font-weight:500; letter-spacing:-.016em;
@@ -149,7 +177,7 @@ button:active{transform:scale(.96)}
 button.x{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
 button.x:hover{filter:brightness(1.08)}
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
-  outline:2px solid var(--accent); outline-offset:2px;
+  outline:2px solid var(--focus); outline-offset:2px;
 }
 
 .msg{
@@ -183,7 +211,7 @@ input,textarea{
   border:1px solid var(--line);border-radius:var(--r-field);
   transition:border-color var(--fast) var(--ease);
 }
-input:focus,textarea:focus{border-color:var(--accent);outline:none}
+input:focus,textarea:focus{border-color:var(--focus);outline:none}
 
 @keyframes rise{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
 
@@ -431,10 +459,10 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                 return
             msg = parse_qs(url.query).get("msg", [""])[0]
             if path == "/api/today":
-                b = build_brief(self.store)
+                b = build_brief(self.store, self.ws)
                 self._send(json.dumps({"objective": b.objective, "counts": b.counts, "funnel": b.funnel, "pipeline_value": b.pipeline_value,
                                        "actions": b.actions, "approved": b.approved, "results": b.results, "summary": b.summary,
-                                       "messages": b.messages}, default=str), ctype="application/json")
+                                       "messages": b.messages, "offer": b.offer}, default=str), ctype="application/json")
             elif path == "/results":
                 self._send(self._page("RESULTS", f"{self.ctx.company_name} — what RevenueOS did and what happened", self._results_html(), msg))
             elif path == "/onboard":
@@ -472,7 +500,7 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             self._send(target.read_bytes(), 200, ctype)
 
         def _today_html(self) -> str:
-            b = build_brief(self.store)
+            b = build_brief(self.store, self.ws)
             rows = "".join(
                 ROW.format(
                     id=a["id"], atype=html.escape(a["action_type"].replace("_", " ")), title=html.escape(a["title"]),
@@ -503,8 +531,10 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             approved_html = (f"<h2>Approved, waiting to run ({len(b.approved)})</h2>"
                              "<p class='sub'>You said yes. Nothing happens until Execute; Execute sends the email or runs the skill and the result lands in RESULTS.</p>"
                              + approved_rows) if b.approved else ""
+            ol = b.offer_line()
+            offer_html = f'<div class="brief note"><span class="type">Pro</span>\n{html.escape(ol)}</div>' if ol else ""
             return (self._objective_html(b) + self._messages_html(b)
-                    + f'<div class="brief">{html.escape(chr(10).join(b.lines()))}</div>{agents_html}{run_form}'
+                    + f'<div class="brief">{html.escape(chr(10).join(b.lines()))}</div>{offer_html}{agents_html}{run_form}'
                     "<p class='sub'>Read-only until you approve. Every line below is something observed about this business; nothing sends, publishes, changes a site or spends until you press Approve and then Execute.</p>"
                     '<h2>Approve / Execute / Ignore</h2>'
                     + (rows or "<p>Nothing pending.</p>")
@@ -517,7 +547,7 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
 
             o = b.objective
             if not o:
-                return f"<div class='brief'><span class='type'>Objective</span>\n{html.escape(HOW_TO_ADD)}</div>"
+                return f"<div class='brief note'><span class='type'>Objective</span>\n{html.escape(HOW_TO_ADD)}</div>"
             parts = [f"<span class='type'>Objective · {html.escape(o['status'])}</span>", f"<b>{html.escape(o['title'])}</b>"]
             parts.append("Next: " + html.escape(o.get("next_action") or "not decided yet — the heartbeat sets this every 30 minutes"))
             if o.get("heartbeat"):
@@ -525,7 +555,7 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                 parts.append(f"<small>Last heartbeat {when} — {html.escape(o['heartbeat'])}</small>")
             else:
                 parts.append("<small>No heartbeat yet — it runs every 30 minutes once the orchestrator is on.</small>")
-            return "<div class='brief'>" + "\n".join(parts) + "</div>"
+            return "<div class='brief note'>" + "\n".join(parts) + "</div>"
 
         def _messages_html(self, b) -> str:
             if not b.messages:

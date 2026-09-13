@@ -1,11 +1,18 @@
 """Tests for the commercial plumbing: licence keys, Stripe webhooks/checkout, and the
 tiny billing HTTP router. Uses the `workspace` fixture from conftest.py — a throwaway
-workspace with its own `data/` directory, nothing touches the repo's own state."""
+workspace with its own `data/` directory, nothing touches the repo's own state.
+
+Licence keys are Ed25519-signed: the `vendor_keys` fixture (conftest.py) generates a
+throwaway keypair, puts the private seed in REVENUEOS_LICENSE_SIGNING_KEY so issuing
+works and the public key in REVENUEOS_LICENSE_PUBLIC_KEY so verification never depends on
+the shipped vendor key. Verification needs no secret — that is the property under test."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
+import os
 import time
 
 import httpx
@@ -23,7 +30,7 @@ from revenueos.billing import (
     verify_webhook_signature,
 )
 
-SECRET = "vendor-hmac-secret"
+SECRET = "vendor-hmac-secret"  # the retired HMAC secret: only legacy keys still use it
 WEBHOOK_SECRET = "whsec_test"
 FAR_FUTURE = "2999-01-01T00:00:00+00:00"
 PAST = "2000-01-01T00:00:00+00:00"
@@ -36,40 +43,70 @@ def _stripe_sig_header(secret: str, payload: bytes, t: int | None = None) -> str
     return f"t={t},v1={sig}"
 
 
+def _legacy_hmac_key(tier: Tier, email: str, expires_at: str, secret: str = SECRET) -> str:
+    """A key in the pre-Ed25519 shape: payload without `alg`, signed with the shared secret.
+    Keys like this are in customers' hands, so verification must keep accepting them."""
+    payload = {"tier": Tier(tier).value, "customer_email": email, "expires_at": expires_at,
+               "issued_at": "2026-01-01T00:00:00+00:00"}
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    payload_b64 = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+    sig = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{payload_b64}.{sig}"
+
+
 # ── licence keys ─────────────────────────────────────────────────────────────
-def test_issue_and_verify_roundtrip():
-    key = issue_license(Tier.pro, "buyer@example.com", FAR_FUTURE, SECRET)
+def test_issue_and_verify_roundtrip(vendor_keys):
+    key = issue_license(Tier.pro, "buyer@example.com", FAR_FUTURE)
     assert key.count(".") == 1
-    lic = verify_license(key, SECRET)
+    lic = verify_license(key)  # no secret anywhere: the whole point of the asymmetric scheme
     assert lic is not None
     assert lic.tier is Tier.pro
     assert lic.customer_email == "buyer@example.com"
     assert lic.expires_at == FAR_FUTURE
+    assert lic.alg == "ed25519"
+    assert lic.kid == vendor_keys["kid"]
 
 
-def test_verify_rejects_wrong_secret():
-    key = issue_license(Tier.business, "buyer@example.com", FAR_FUTURE, SECRET)
-    assert verify_license(key, "not-the-secret") is None
+def test_issue_without_a_signing_key_raises():
+    with pytest.raises(RuntimeError) as exc:
+        issue_license(Tier.pro, "buyer@example.com", FAR_FUTURE, SECRET)
+    assert "REVENUEOS_LICENSE_SIGNING_KEY" in str(exc.value)  # and never an HMAC key instead
 
 
-def test_verify_rejects_tampered_payload():
-    key = issue_license(Tier.agency, "buyer@example.com", FAR_FUTURE, SECRET)
+def test_verify_rejects_a_key_signed_by_an_unknown_key(vendor_keys, monkeypatch):
+    key = issue_license(Tier.business, "buyer@example.com", FAR_FUTURE)
+    # the same key, verified on an install that trusts a different vendor
+    monkeypatch.setenv("REVENUEOS_LICENSE_PUBLIC_KEY", base64.b64encode(b"\x01" * 32).decode("ascii"))
+    assert verify_license(key) is None
+
+
+def test_verify_rejects_tampered_payload(vendor_keys):
+    key = issue_license(Tier.agency, "buyer@example.com", FAR_FUTURE)
     payload_b64, sig = key.split(".", 1)
     # flip a character in the payload without recomputing the signature
     tampered_char = "A" if payload_b64[0] != "A" else "B"
     tampered = tampered_char + payload_b64[1:]
-    assert verify_license(f"{tampered}.{sig}", SECRET) is None
+    assert verify_license(f"{tampered}.{sig}") is None
 
 
-def test_verify_rejects_expired():
-    key = issue_license(Tier.pro, "buyer@example.com", PAST, SECRET)
-    assert verify_license(key, SECRET) is None
+def test_verify_rejects_expired(vendor_keys):
+    key = issue_license(Tier.pro, "buyer@example.com", PAST)
+    assert verify_license(key) is None
 
 
-def test_verify_rejects_malformed_key():
-    assert verify_license("not-a-real-key", SECRET) is None
-    assert verify_license("", SECRET) is None
-    assert verify_license("###.###", SECRET) is None
+def test_verify_rejects_malformed_key(vendor_keys):
+    assert verify_license("not-a-real-key") is None
+    assert verify_license("") is None
+    assert verify_license("###.###") is None
+
+
+def test_legacy_hmac_key_verifies_only_when_the_old_secret_is_set(monkeypatch):
+    key = _legacy_hmac_key(Tier.pro, "old@example.com", FAR_FUTURE)
+    assert verify_license(key) is None                      # a customer install: no secret, no tier
+    monkeypatch.setenv("REVENUEOS_LICENSE_SECRET", SECRET)   # the vendor's own install
+    lic = verify_license(key)
+    assert lic is not None and lic.tier is Tier.pro and lic.alg == "hmac-sha256"
+    assert verify_license(key, "not-the-secret") is None
 
 
 # ── load_license / require_tier (customer install side) ─────────────────────
@@ -78,45 +115,49 @@ def test_load_license_defaults_to_community_when_no_file(workspace):
     assert lic.tier is Tier.community
 
 
-def test_load_license_verifies_installed_key(workspace, monkeypatch):
-    monkeypatch.setenv("REVENUEOS_LICENSE_SECRET", SECRET)
-    key = issue_license(Tier.business, "owner@acme.example", FAR_FUTURE, SECRET)
+def test_load_license_verifies_installed_key_without_any_secret(workspace, vendor_keys):
+    key = issue_license(Tier.business, "owner@acme.example", FAR_FUTURE)
     (workspace.data / "license.json").write_text(json.dumps({"key": key}))
     lic = load_license(workspace)
     assert lic.tier is Tier.business
     assert lic.customer_email == "owner@acme.example"
 
 
-def test_load_license_falls_back_to_community_without_secret_configured(workspace, monkeypatch):
-    monkeypatch.delenv("REVENUEOS_LICENSE_SECRET", raising=False)
-    key = issue_license(Tier.agency, "owner@acme.example", FAR_FUTURE, SECRET)
+def test_load_license_reads_pro_with_nothing_but_the_public_key(workspace, vendor_keys, monkeypatch):
+    """The defect this scheme fixes: a self-hosted customer holds no secret at all."""
+    key = issue_license(Tier.pro, "buyer@example.com", FAR_FUTURE)
     (workspace.data / "license.json").write_text(json.dumps({"key": key}))
+    monkeypatch.delenv("REVENUEOS_LICENSE_SIGNING_KEY", raising=False)  # not the vendor's machine
+    assert "REVENUEOS_LICENSE_SECRET" not in os.environ
     lic = load_license(workspace)
-    assert lic.tier is Tier.community
+    assert lic.tier is Tier.pro
+    assert require_tier(workspace, Tier.pro) is None
 
 
-def test_load_license_falls_back_to_community_on_tampered_file(workspace, monkeypatch):
-    monkeypatch.setenv("REVENUEOS_LICENSE_SECRET", SECRET)
+def test_load_license_falls_back_to_community_for_a_legacy_key_without_the_secret(workspace):
+    key = _legacy_hmac_key(Tier.agency, "owner@acme.example", FAR_FUTURE)
+    (workspace.data / "license.json").write_text(json.dumps({"key": key}))
+    assert load_license(workspace).tier is Tier.community
+
+
+def test_load_license_falls_back_to_community_on_tampered_file(workspace):
     (workspace.data / "license.json").write_text(json.dumps({"key": "garbage.notasig"}))
     assert load_license(workspace).tier is Tier.community
 
 
-def test_require_tier_blocks_below_minimum(workspace, monkeypatch):
-    monkeypatch.delenv("REVENUEOS_LICENSE_SECRET", raising=False)
+def test_require_tier_blocks_below_minimum(workspace):
     msg = require_tier(workspace, Tier.pro)
     assert msg is not None
     assert "Pro" in msg
     assert "99" in msg
 
 
-def test_require_tier_allows_community_minimum(workspace, monkeypatch):
-    monkeypatch.delenv("REVENUEOS_LICENSE_SECRET", raising=False)
+def test_require_tier_allows_community_minimum(workspace):
     assert require_tier(workspace, Tier.community) is None
 
 
-def test_require_tier_allows_when_licence_meets_minimum(workspace, monkeypatch):
-    monkeypatch.setenv("REVENUEOS_LICENSE_SECRET", SECRET)
-    key = issue_license(Tier.business, "owner@acme.example", FAR_FUTURE, SECRET)
+def test_require_tier_allows_when_licence_meets_minimum(workspace, vendor_keys):
+    key = issue_license(Tier.business, "owner@acme.example", FAR_FUTURE)
     (workspace.data / "license.json").write_text(json.dumps({"key": key}))
     assert require_tier(workspace, Tier.pro) is None
     assert require_tier(workspace, Tier.business) is None
@@ -169,14 +210,14 @@ def _checkout_completed_event(*, tier: str = "pro", email: str = "buyer@example.
     return {"id": "evt_test_1", "type": "checkout.session.completed", "data": {"object": obj}}
 
 
-def test_handle_webhook_checkout_completed_issues_license_and_appends_row(workspace):
+def test_handle_webhook_checkout_completed_issues_license_and_appends_row(workspace, vendor_keys):
     event = _checkout_completed_event()
     payload = json.dumps(event).encode("utf-8")
     header = _stripe_sig_header(WEBHOOK_SECRET, payload)
 
     result = handle_webhook(
         payload, header,
-        webhook_secret=WEBHOOK_SECRET, license_secret=SECRET,
+        webhook_secret=WEBHOOK_SECRET,
         price_ids={Tier.pro: "price_pro_123"}, ws=workspace,
     )
 
@@ -184,7 +225,7 @@ def test_handle_webhook_checkout_completed_issues_license_and_appends_row(worksp
     assert result["tier"] == "pro"
     assert result["email"] == "buyer@example.com"
     assert "." in result["key"]
-    lic = verify_license(result["key"], SECRET)
+    lic = verify_license(result["key"])
     assert lic is not None and lic.tier is Tier.pro and lic.customer_email == "buyer@example.com"
 
     rows_path = workspace.data / "licenses.jsonl"
@@ -200,59 +241,59 @@ def test_handle_webhook_checkout_completed_issues_license_and_appends_row(worksp
     assert "issued_at" in row
 
 
-def test_handle_webhook_maps_price_id_when_no_metadata(workspace):
+def test_handle_webhook_maps_price_id_when_no_metadata(workspace, vendor_keys):
     event = _checkout_completed_event(tier="", price_id="price_business_456")
     payload = json.dumps(event).encode("utf-8")
     header = _stripe_sig_header(WEBHOOK_SECRET, payload)
 
     result = handle_webhook(
         payload, header,
-        webhook_secret=WEBHOOK_SECRET, license_secret=SECRET,
+        webhook_secret=WEBHOOK_SECRET,
         price_ids={Tier.business: "price_business_456"}, ws=workspace,
     )
     assert result["ok"] is True
     assert result["tier"] == "business"
 
 
-def test_handle_webhook_bad_signature_rejected(workspace):
+def test_handle_webhook_bad_signature_rejected(workspace, vendor_keys):
     event = _checkout_completed_event()
     payload = json.dumps(event).encode("utf-8")
     result = handle_webhook(
         payload, "t=1,v1=deadbeef",
-        webhook_secret=WEBHOOK_SECRET, license_secret=SECRET,
+        webhook_secret=WEBHOOK_SECRET,
         price_ids={Tier.pro: "price_pro_123"}, ws=workspace,
     )
     assert result == {"ok": False, "error": "invalid webhook signature"}
     assert not (workspace.data / "licenses.jsonl").exists()
 
 
-def test_handle_webhook_unknown_price_id(workspace):
+def test_handle_webhook_unknown_price_id(workspace, vendor_keys):
     event = _checkout_completed_event(tier="", price_id="price_unknown")
     payload = json.dumps(event).encode("utf-8")
     header = _stripe_sig_header(WEBHOOK_SECRET, payload)
     result = handle_webhook(
         payload, header,
-        webhook_secret=WEBHOOK_SECRET, license_secret=SECRET,
+        webhook_secret=WEBHOOK_SECRET,
         price_ids={Tier.pro: "price_pro_123"}, ws=workspace,
     )
     assert result["ok"] is False
     assert "tier" in result["error"]
 
 
-def test_handle_webhook_missing_email(workspace):
+def test_handle_webhook_missing_email(workspace, vendor_keys):
     obj = {"id": "cs_test_2", "customer": "cus_2", "subscription": "sub_2", "metadata": {"tier": "pro"}}
     event = {"id": "evt_2", "type": "checkout.session.completed", "data": {"object": obj}}
     payload = json.dumps(event).encode("utf-8")
     header = _stripe_sig_header(WEBHOOK_SECRET, payload)
     result = handle_webhook(
         payload, header,
-        webhook_secret=WEBHOOK_SECRET, license_secret=SECRET,
+        webhook_secret=WEBHOOK_SECRET,
         price_ids={Tier.pro: "price_pro_123"}, ws=workspace,
     )
     assert result == {"ok": False, "error": "missing customer email in event"}
 
 
-def test_handle_webhook_subscription_deleted_revokes(workspace):
+def test_handle_webhook_subscription_deleted_revokes(workspace, vendor_keys):
     obj = {"id": "sub_test_999", "customer": "cus_test_999"}
     event = {"id": "evt_3", "type": "customer.subscription.deleted", "data": {"object": obj}}
     payload = json.dumps(event).encode("utf-8")
@@ -260,7 +301,7 @@ def test_handle_webhook_subscription_deleted_revokes(workspace):
 
     result = handle_webhook(
         payload, header,
-        webhook_secret=WEBHOOK_SECRET, license_secret=SECRET,
+        webhook_secret=WEBHOOK_SECRET,
         price_ids={Tier.pro: "price_pro_123"}, ws=workspace,
     )
     assert result["ok"] is True
@@ -274,13 +315,13 @@ def test_handle_webhook_subscription_deleted_revokes(workspace):
     assert rows[0]["stripe_customer"] == "cus_test_999"
 
 
-def test_handle_webhook_unhandled_event_type(workspace):
+def test_handle_webhook_unhandled_event_type(workspace, vendor_keys):
     event = {"id": "evt_4", "type": "invoice.paid", "data": {"object": {}}}
     payload = json.dumps(event).encode("utf-8")
     header = _stripe_sig_header(WEBHOOK_SECRET, payload)
     result = handle_webhook(
         payload, header,
-        webhook_secret=WEBHOOK_SECRET, license_secret=SECRET,
+        webhook_secret=WEBHOOK_SECRET,
         price_ids={}, ws=workspace,
     )
     assert result["ok"] is False
@@ -386,9 +427,8 @@ def test_billing_http_webhook_not_configured_returns_500(workspace, monkeypatch)
     assert ctype == "application/json"
 
 
-def test_billing_http_webhook_dispatches_to_handle_webhook(workspace, monkeypatch):
+def test_billing_http_webhook_dispatches_to_handle_webhook(workspace, vendor_keys, monkeypatch):
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", WEBHOOK_SECRET)
-    monkeypatch.setenv("REVENUEOS_LICENSE_SECRET", SECRET)
     monkeypatch.setenv("STRIPE_PRICE_PRO", "price_pro_123")
 
     event = _checkout_completed_event()
@@ -403,3 +443,44 @@ def test_billing_http_webhook_dispatches_to_handle_webhook(workspace, monkeypatc
     result = json.loads(body)
     assert result["ok"] is True
     assert result["tier"] == "pro"
+
+
+def test_billing_http_webhook_without_a_signing_key_is_not_configured(workspace, monkeypatch):
+    """The billing host must hold the Ed25519 signing key; the old HMAC secret no longer counts."""
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", WEBHOOK_SECRET)
+    monkeypatch.setenv("REVENUEOS_LICENSE_SECRET", SECRET)
+    status, _ctype, body = billing_http("/billing/webhook", "POST", b"{}", {}, workspace)
+    assert status == 500
+    assert json.loads(body)["ok"] is False
+
+
+# ── `revenueos license install|show` ─────────────────────────────────────────
+def _license_cli(argv: list[str], workspace) -> int:
+    from revenueos.cli import main
+
+    return main(["--root", str(workspace.root), *argv])
+
+
+def test_license_install_writes_and_shows_a_verifiable_key(workspace, vendor_keys, capsys):
+    key = issue_license(Tier.pro, "owner@acme.example", FAR_FUTURE)
+    assert _license_cli(["license", "install", key], workspace) == 0
+    out = capsys.readouterr().out
+    assert "Pro" in out and "ed25519" in out and vendor_keys["kid"] in out
+    assert json.loads((workspace.data / "license.json").read_text())["key"] == key
+
+    assert _license_cli(["license", "show"], workspace) == 0
+    shown = capsys.readouterr().out
+    assert "tier:    pro" in shown
+    assert "alg:     ed25519" in shown
+    assert f"kid:     {vendor_keys['kid']}" in shown
+
+
+def test_license_install_refuses_a_key_it_cannot_verify(workspace, vendor_keys, capsys):
+    assert _license_cli(["license", "install", "not-a-real-key"], workspace) == 2
+    err = capsys.readouterr().err
+    assert "did not verify" in err and "nothing was installed" in err
+    assert not (workspace.data / "license.json").exists()
+
+    expired = issue_license(Tier.pro, "owner@acme.example", PAST)
+    assert _license_cli(["license", "install", expired], workspace) == 2
+    assert not (workspace.data / "license.json").exists()

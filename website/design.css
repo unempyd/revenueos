@@ -188,6 +188,20 @@ ul.plain li b{color:var(--frost);font-weight:600}
 .cta-btn{white-space:nowrap;padding-inline:24px}
 .price-card .cta-btn{white-space:normal}
 .cta-btn.block{width:100%}
+/* Inline code, every page. Each page's legacy inline style paints it for a light
+   background — proof.html sets color:#28299e on var(--accent-soft), and that token
+   now remaps to a translucent blue over black, so the HTTP table read as dark ink on
+   a dark chip (about 1.3:1). One treatment here instead of a per-section override,
+   so a new page or a new table cannot inherit the light-theme colours again. The
+   second line keeps code inside a pre or a terminal block unchipped. */
+code{
+  background:rgba(255,255,255,.08);color:var(--frost);
+  border-radius:6px;padding:2px 6px;font-size:.92em;
+}
+pre code,.code-block code,.audit-out code,.loopdemo code{
+  background:none;color:inherit;padding:0;border-radius:0;font-size:inherit;
+}
+
 /* inline code inside a tier must not read as a highlighted link */
 .price-card code,.tier-note code,ul.plain code{
   background:rgba(255,255,255,.07);color:var(--frost);
@@ -561,4 +575,36 @@ a:active,summary:active{opacity:.62}
 /* ── hero recording (page content owns the <video>; design owns its frame) ── */
 .wire-video{margin:0;max-width:100%}
 .hero-video{width:100%;height:auto;display:block;border-radius:28px;border:1px solid #424245;background:#000}
-#connects .wire{max-width:640px;margin:24px auto 0}
+#connects .wire{max-width:900px;margin:28px auto 0}
+
+
+/* ── the loop diagram (index #connects) ───────────────────────────────────
+   One figure, one claim: nothing acts before the customer's yes, and whatever
+   does act is measured. Two hand-authored SVGs — a left-to-right band, and a
+   stacked one for phones, where a 1020-wide viewBox would shrink a 13px label to
+   about 4px. Colour carries exactly one meaning: blue is the gate and the edge
+   leaving it. No looping animation — this is a reference, not an ornament. */
+.wire{margin:0;max-width:100%}
+.wire svg{width:100%;height:auto;display:block}
+.wire svg.narrow{display:none}
+.wire .node rect{fill:var(--obsidian);stroke:var(--smoke);stroke-width:1}
+.wire .node text{text-anchor:middle}
+.wire .node .ttl{fill:var(--frost);font:600 15px var(--sans);letter-spacing:-.012em}
+.wire .node .sub{fill:var(--platinum);font:400 11.5px var(--sans);letter-spacing:0}
+.wire .gate rect{fill:var(--blue);stroke:none}
+.wire .gate .ttl{fill:#fff}
+.wire .gate .sub{fill:rgba(255,255,255,.86)}
+.wire .edge line,.wire .edge path{stroke:var(--smoke);stroke-width:1.5;fill:none}
+.wire .edge .go{stroke:var(--blue)}
+.wire .head{fill:var(--smoke)}
+.wire .head.go{fill:var(--blue)}
+.wire .lab text{fill:var(--platinum);font:400 11.5px var(--sans);text-anchor:middle;letter-spacing:0}
+.wire .lab .go{fill:var(--halo)}
+.wire .chip text{fill:var(--platinum);font:400 11.5px var(--sans);text-anchor:middle;letter-spacing:0}
+.wire figcaption{font-size:15px;line-height:1.55;color:var(--platinum);margin-top:18px;max-width:62ch}
+.wire figcaption b{color:var(--frost);font-weight:600}
+@media (max-width:760px){
+  .wire svg.wide{display:none}
+  .wire svg.narrow{display:block;max-width:320px;margin-inline:auto}
+  #connects .wire figcaption{margin-inline:auto}
+}

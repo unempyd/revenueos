@@ -23,7 +23,7 @@ uv run revenueos agent run <role> "<task>" [--json]      # roles: research marke
 uv run revenueos learn | lessons | refine <role> --evidence .. --change .. | refine <role> --rollback
 uv run revenueos serve [--host 0.0.0.0 --port 8791]     # control panel; non-loopback needs REVENUEOS_PANEL_PASSWORD
 uv run revenueos orchestrator [--once <automation>]      # the always-on worker loop over data/automations.json; continuous mode needs a Pro licence
-uv run revenueos license show|install <key>|issue ...    # licence (vendor issues with REVENUEOS_LICENSE_SECRET)
+uv run revenueos license show|install <key>|issue ...    # licence (verified offline with the shipped public key; vendor issues with REVENUEOS_LICENSE_SIGNING_KEY_FILE)
 uv run revenueos billing checkout --tier pro --success-url .. --cancel-url ..   # Stripe Checkout URL (STRIPE_SECRET_KEY, STRIPE_PRICE_PRO)
 docker compose up orchestrator panel; docker compose --profile outreach up      # see deploy/README.md for production
 deploy/smoke.sh https://host                             # /health + /api/today
@@ -34,8 +34,9 @@ Environment: LLM provider auto-detected (`REVENUEOS_LLM=anthropic|claude-cli|off
 `REVENUEOS_EFFORT`); otherwise a signed-in Claude Code CLI (`claude -p`).
 `SMTP_PASSWORD`/`IMAP_PASSWORD` + `smtp.host`/`imap.host` in `revenueos.yaml` for real
 mail; `REVENUEOS_DRY_RUN=1` writes emails to `data/outputs/`. `REVENUEOS_PANEL_PASSWORD`,
-`REVENUEOS_WORKER_TOKEN`, `REVENUEOS_LICENSE_SECRET`, `STRIPE_SECRET_KEY`,
-`STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_<TIER>`.
+`REVENUEOS_WORKER_TOKEN`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`STRIPE_PRICE_<TIER>`. Licence verification needs no key at all; issuing (vendor side)
+needs `REVENUEOS_LICENSE_SIGNING_KEY` or `REVENUEOS_LICENSE_SIGNING_KEY_FILE`.
 
 ## The loop (what the product is)
 
@@ -97,9 +98,12 @@ last stdout line.
   `REVENUEOS_PANEL_PASSWORD` is set; it refuses non-loopback binds without it.
   `/billing/*` is handled by `billing.billing_http`; `/site/` serves `website/`.
 - Tiers: Community = manual runs; Pro = continuous operation (`orchestrator` without
-  `--once`), gated by `billing.require_tier`. Licence = HMAC-signed key in
-  `data/license.json`, verified with `REVENUEOS_LICENSE_SECRET`; the Stripe webhook issues
-  keys and appends `data/licenses.jsonl`.
+  `--once`), gated by `billing.require_tier`. Licence = Ed25519-signed key in
+  `data/license.json`, verified offline against the public keys shipped in
+  `billing.LICENSE_PUBLIC_KEYS` — an install needs no secret to verify what it paid for
+  (add your own vendor key with `REVENUEOS_LICENSE_PUBLIC_KEY`). The vendor signs with
+  `REVENUEOS_LICENSE_SIGNING_KEY` / `REVENUEOS_LICENSE_SIGNING_KEY_FILE`; the Stripe webhook
+  issues keys and appends `data/licenses.jsonl`.
 
 **Where each worker's substance comes from:** see `NOTICE.md` for the specific upstream
 project behind each worker's vendored core; in brief — `ads-audit` runs adapters/scoring/

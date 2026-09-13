@@ -131,14 +131,46 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 def cmd_today(args: argparse.Namespace) -> int:
-    _ws, store, ctx = _boot(args)
-    brief = build_brief(store)
+    ws, store, ctx = _boot(args)
+    brief = build_brief(store, ws)
     if args.json:
         print(json.dumps({"objective": brief.objective, "counts": brief.counts, "funnel": brief.funnel, "pipeline_value": brief.pipeline_value,
-                          "actions": brief.actions, "approved": brief.approved, "metrics": brief.metrics, "messages": brief.messages},
+                          "actions": brief.actions, "approved": brief.approved, "metrics": brief.metrics, "messages": brief.messages,
+                          "offer": brief.offer},
                          indent=2, default=str))
     else:
         print(brief.render_text(ctx.company_name))
+    return 0
+
+
+def cmd_offer(args: argparse.Namespace) -> int:
+    """Where this workspace stands on the pay-on-result clock, and what is drafted about it."""
+    from .convert import offer_line, offer_state
+
+    ws, store, ctx = _boot(args)
+    st = offer_state(ws, store, ctx)
+    pending = [a for a in store.list_actions("pending", limit=500)
+               if (a.get("context") or {}).get("kind") in ("offer", "license_delivery")]
+    if args.json:
+        print(json.dumps({"offer": st, "actions": pending}, indent=2, default=str))
+        return 0
+    print(f"OFFER — {ctx.company_name}\n")
+    print(f"state: {st['state']}   ({st['reason']})")
+    if st["first_result_at"]:
+        print(f"first measured result: {st['first_result_at'][:10]}"
+              + (f" · {st['days_left']} free day(s) left" if st["days_left"] is not None else ""))
+    print(f"Pro: ${st['price']}/month · payment link: {st['payment_link'] or 'not configured (billing.payment_link or REVENUEOS_PAYMENT_LINK_PRO)'}")
+    line = offer_line(st)
+    if line:
+        print(f"\n{line}")
+    if pending:
+        print(f"\nwaiting for your decision ({len(pending)}):")
+        for a in pending:
+            print(f"[{a['id']:>4}] {a['title'][:80]}")
+        print("\nrevenueos approve <id> && revenueos execute <id>")
+    else:
+        print("\nnothing drafted (the heartbeat drafts the offer once a result is measured; "
+              "`revenueos run billing` drafts a licence delivery for a paying customer).")
     return 0
 
 
@@ -704,6 +736,10 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("results", help="what RevenueOS did and what measurable result occurred")
     s.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_results)
+
+    s = sub.add_parser("offer", help="the pay-on-result clock and what is drafted about it")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_offer)
 
     s = sub.add_parser("next", help="the next highest-value actions, ranked from measured results")
     s.add_argument("--limit", type=int, default=5)

@@ -201,6 +201,33 @@ separate daemon and no second product layer.
 TODAY (CLI and panel) leads with the objective, its next action and the last heartbeat, so
 the answer to "what is RevenueOS doing for me?" is the first thing on the page.
 
+## Convert
+
+The chain ends "prove the result → convert the value into revenue", and `src/revenueos/convert.py`
+is that last link. `offer_state` names where a workspace stands on the pay-on-result clock that
+`billing.pay_on_result` already owns — `none` (nothing measured, nothing to charge for),
+`clock_running` (first measured result on a date, N free days left), `due` (the 14 days are up),
+`licensed` — and carries the Pro price and the payment link from `billing.payment_link` in
+`revenueos.yaml` or `REVENUEOS_PAYMENT_LINK_PRO`, or `None` when the install was never given one
+(a link is never invented). The heartbeat calls the convert step on every run: `ensure_offer_action`
+drafts exactly ONE pending `follow_up`, "Offer Pro to `<company>`", whose body quotes the measured
+before → after that is in the store, the date, the free days remaining, the price, the link when
+there is one and `revenueos license install <key>` — deduped on `offer:pro:<first result date>`, with
+`executor: send_email` only when an address is on file, and never sent by anything but a human's
+Approve → Execute. `offer: {state, days_left, action_id}` lands in the heartbeat's details, `· offer:
+<state>` in its summary, and one operator message when the draft is created. TODAY, the panel and
+`/api/today` show one line while the state is `clock_running` or `due`, and nothing otherwise. In
+hosted mode (`accounts.json`) `offers_for_tenants` computes each tenant's state from that tenant's
+own store and drafts the offer in the HOST workspace with the tenant's account email, so the host
+operator sends it and no tenant ever sees another tenant's data. The reverse direction closes
+without a webhook: the `billing` worker reads the connected Stripe account's active subscriptions
+(`connections/stripe_conn.paying_customers`), records the `paying_customers` metric, writes
+`data/exports/stripe-customers.json`, and for every paying email with no row in
+`data/licenses.jsonl` mints a 35-day Pro key (when the Ed25519 signing key is configured; otherwise it
+says so and issues nothing) and drafts a "Deliver Pro licence to `<email>`" action. `measure_offer`
+closes the loop honestly: an executed offer becomes `subscribed 0 → 1` only once that same address
+appears among the paying customers, and stays `pending` until it does.
+
 ## Capability packs
 
 RevenueOS ships 13 capability packs — ads, agency, cmo, core, creative, growth,

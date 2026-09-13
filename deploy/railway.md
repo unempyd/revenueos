@@ -63,7 +63,7 @@ Mirrors Kairos' `Dockerfile.worker` header, renamed for RevenueOS:
 | — | `REVENUEOS_ROOT=/app` | both services |
 | — | `REVENUEOS_PANEL_PASSWORD` | panel only — the panel refuses to bind to a non-loopback address without it |
 | — | `SMTP_PASSWORD`, `IMAP_PASSWORD` | worker (outreach/inbox workers send and read real mail) |
-| — | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `REVENUEOS_LICENSE_SECRET` | panel (billing routes) |
+| — | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `REVENUEOS_LICENSE_SIGNING_KEY` | panel (billing routes; the signing key mints the licence a payment earns) |
 
 Full secret list and how to provision each: `deploy/README.md`.
 

@@ -8,7 +8,9 @@ one `outcomes` row per executed action, by kind:
   * follow_up (send) — replies / bounces on the send row (`replied`, from the inbox worker)
   * ad_waste / campaign_attention — the campaign's spend and conversions in the next export
                        window (`campaign_spend_delta`, `campaign_conversions_delta`)
-  * content_opportunity — the deliverable exists in data/outputs (`deliverable_written`)
+  * content_opportunity — the deliverable exists in data/outputs (`produced`, not yet published)
+  * publish_post        — the published WordPress URL is live and carries the deliverable's title
+                       (`published` 0→1)
   * prospect / market_signal — unmeasurable until a downstream action exists (recorded as such)
 
 Outcomes are honest: `pending` until evidence exists, `measured` when it does, `no_effect`
@@ -227,6 +229,40 @@ def _check_published(url: str, title: str) -> tuple[bool, str]:
     return True, ""
 
 
+def measure_publish(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """A publish_post action (executors.execute_publish_post) is measured by fetching its own
+    published_url: a live 200 page carrying the deliverable's title is 'published' 0→1 (measured);
+    a 404/410 or a page missing the title is no_effect (published, but the evidence says it didn't
+    take, or was taken down); a fetch failure is not evidence either way — pending, retried next run.
+
+    Search Console page-level clicks for the published URL would be a second, later outcome
+    (`search_clicks`, before 0 → after N) — `connections.google.search_console` already returns
+    per-page rows, so the read itself is a one-call addition. It is left out here: this worker's
+    per-action loop stamps an action 'final' the moment one outcome lands `measured`, so a second,
+    slower-arriving metric on the same action needs its own tracking (not reusing this call), which
+    is a real design change, not a small addition. Recorded here as unmeasurable-for-now so that is
+    never silently implied to be tracked."""
+    c = action.get("context") or {}
+    published_url = c.get("published_url")
+    if not published_url:
+        return "pending", {"note": "not published yet"}
+    title = ""
+    deliverable = c.get("deliverable")
+    if deliverable:
+        path = ws.root / deliverable
+        if path.exists():
+            title = _deliverable_title(path)
+    ok, reason = _check_published(published_url, title)
+    after = {"published_url": published_url,
+             "note": "search_clicks: needs a Search Console read filtered to this URL once the page is indexed; not tracked yet"}
+    if ok:
+        return "measured", {"metric": "published", "before_value": 0.0, "after_value": 1.0, "before": {"published": 0.0}, "after": after}
+    if reason.startswith("publication URL unreachable"):
+        return "pending", {"note": reason}
+    return "no_effect", {"metric": "published", "before_value": 0.0, "after_value": 0.0, "before": {"published": 0.0},
+                         "after": after, "note": reason}
+
+
 def measure_content(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     outputs = sorted(ws.outputs.glob(f"*-{action['id']}.md"))
     if not outputs:
@@ -281,6 +317,8 @@ class MeasureWorker:
                     status, data = measure_search_terms(ws, action)
                 elif atype in ("ad_waste", "campaign_attention"):
                     status, data = measure_ads(ws, store, action)
+                elif action["context"].get("executor") == "publish_post":
+                    status, data = measure_publish(ws, action)
                 elif atype == "content_opportunity" or action["context"].get("executor") == "run_skill":
                     status, data = measure_content(ws, action)
                 else:

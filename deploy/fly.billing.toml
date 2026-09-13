@@ -4,7 +4,7 @@
 #   fly apps create revenueos-billing
 #   fly volumes create revenueos_data --size 1 --region iad --app revenueos-billing
 #   fly secrets set --app revenueos-billing \
-#       REVENUEOS_PANEL_PASSWORD=... REVENUEOS_LICENSE_SECRET=... \
+#       REVENUEOS_PANEL_PASSWORD=... REVENUEOS_LICENSE_SIGNING_KEY=... \
 #       STRIPE_SECRET_KEY=sk_live_... STRIPE_PRICE_PRO=price_... STRIPE_PRICE_BUSINESS=price_... STRIPE_PRICE_AGENCY=price_...
 #   fly deploy --config deploy/fly.billing.toml --dockerfile Dockerfile
 #   # then create the Stripe webhook for https://revenueos-billing.fly.dev/billing/webhook and

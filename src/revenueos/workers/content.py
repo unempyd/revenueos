@@ -4,7 +4,10 @@ The 790 vendored skills are prose procedures for an LLM.  This worker picks the 
 match the business's channels (registry search over the unified index), creates one
 `content_opportunity` action per skill, and — on Execute — runs the skill the way a
 Claude Code host would: SKILL.md as the system prompt, business context + corrections
-as the user turn, output written to data/outputs/.  Content never auto-publishes.
+as the user turn, output written to data/outputs/.  Content never auto-publishes: when
+a writable WordPress connection exists, a *separate* "Publish: <title>" action is queued
+for its own approval (executor `publish_post`, in workers/executors.py); without one,
+nothing changes.
 """
 from __future__ import annotations
 
@@ -185,5 +188,25 @@ def execute_content(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM 
     safe = re.sub(r"[^a-z0-9]+", "-", f"{slug}-{action['id']}".lower()).strip("-")
     path = ws.outputs / f"{datetime.now(UTC):%Y%m%d}-{safe}.md"
     path.write_text(f"# {action['title']}\n\n{cleaned}", encoding="utf-8")
+    rel = str(path.relative_to(ws.root))
+    store.update_action_context(action["id"], deliverable=rel)
     note = f" ({'; '.join(notes)})" if notes else ""
-    return f"deliverable written to {path.relative_to(ws.root)}{note}"
+    _offer_publish(ws, store, action, rel)
+    return f"deliverable written to {rel}{note}"
+
+
+def _offer_publish(ws: Workspace, store: Store, action: dict[str, Any], deliverable: str) -> None:
+    """When the workspace has a WordPress connection with 'allow changes' on, queue a *separate*
+    pending action to publish the deliverable — the human approves publication independently of
+    production. Without a writable WordPress connection, nothing changes."""
+    from ..connections import ConnectionStore
+
+    wp = ConnectionStore(ws).get("wordpress")
+    if not wp or not wp.allow_write:
+        return
+    store.create_action(
+        "content_opportunity", f"Publish: {action['title']}",
+        f"Publish this deliverable to WordPress: {action['title']}",
+        dedupe_key=f"publish:{action['id']}",
+        context={"executor": "publish_post", "deliverable": deliverable, "source_action_id": action["id"]},
+    )

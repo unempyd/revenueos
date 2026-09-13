@@ -272,8 +272,31 @@ def send_smtp(cfg: dict[str, Any], to_email: str, subject: str, text: str) -> st
     return msg["Message-ID"] or ""
 
 
+def execute_plain_send(ws: Workspace, store: Store, ctx: BusinessContext, action: dict[str, Any]) -> str:
+    """An email RevenueOS wrote itself rather than a lead draft (the Pro offer, a licence delivery):
+    the body IS the action's content, there is no lead, no recipe and no send row to attribute it to.
+    Same refusals and the same dry-run behaviour as a cold email."""
+    c = action["context"]
+    to_email = (c.get("to") or "").strip()
+    if not to_email:
+        return "not sent: no recipient address on this action"
+    if store.is_unsubscribed(to_email):
+        return f"not sent: {to_email} is on the suppression list"
+    subject = c.get("subject") or action["title"]
+    text = action.get("content") or ""
+    dry = os.environ.get("REVENUEOS_DRY_RUN") == "1" or (ctx.config.get("outreach") or {}).get("dry_run", False)
+    if dry:
+        path = ws.outputs / f"email-action-{action['id']}.txt"
+        path.write_text(f"To: {to_email}\nSubject: {subject}\n\n{text}", encoding="utf-8")
+        return f"written to {path} (dry run) — nothing was sent"
+    send_smtp(ctx.config, to_email, subject, text)
+    return f"sent via smtp to {to_email}"
+
+
 def execute_send(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, action: dict[str, Any]) -> str:
     c = action["context"]
+    if not c.get("draft_id"):
+        return execute_plain_send(ws, store, ctx, action)
     draft, lead = _as_models(store, c["draft_id"])
     to_email = c["to"]
     cap = int((ctx.config.get("outreach") or {}).get("daily_cap", 25))

@@ -44,6 +44,14 @@ class Brief:
     approved: list[dict[str, Any]] = field(default_factory=list)  # decided yes, not executed yet
     objective: dict[str, Any] | None = None                       # what all of this is for (objectives.py)
     messages: list[dict[str, Any]] = field(default_factory=list)  # unread notes from RevenueOS to the operator
+    offer: dict[str, Any] | None = None                           # the pay-on-result clock (convert.offer_state)
+
+    def offer_line(self) -> str | None:
+        """One line, only while the clock is running or overdue — never when nothing was measured
+        (state `none`) and never once a licence is installed (`licensed`)."""
+        from .convert import offer_line
+
+        return offer_line(self.offer)
 
     def funnel_line(self) -> str | None:
         """'leads: 30 found · 9 contactable · 0 qualified' — three numbers, reported separately, so
@@ -99,6 +107,9 @@ class Brief:
         if msgs:
             body += msgs + [""]
         body += self.lines()
+        ol = self.offer_line()
+        if ol:
+            body += ["", ol]
         if not self.actions and not self.approved:
             body += ["", "Nothing pending. Run `revenueos run all` or wait for the orchestrator."]
         else:
@@ -156,10 +167,19 @@ def rank_next(store: Store, limit: int = 5) -> list[dict[str, Any]]:
     return ranked[:limit]
 
 
-def build_brief(store: Store) -> Brief:
+def build_brief(store: Store, ws: Any | None = None) -> Brief:
+    """The brief. With a workspace it also carries the pay-on-result clock (`convert.offer_state`),
+    which needs the installed licence and the workspace config; without one it simply has none."""
     from .objectives import objective_block
 
+    offer = None
+    if ws is not None:
+        from .convert import offer_state
+
+        offer = offer_state(ws, store)
+
     return Brief(
+        offer=offer,
         counts=store.counts_by_type("pending"),
         pipeline_value=store.pipeline_value(),
         actions=store.list_actions("pending"),

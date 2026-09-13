@@ -58,6 +58,10 @@ services:
       # which service you name on `up`, so a hard requirement on this
       # service would also block starting `orchestrator` alone.
       - REVENUEOS_PANEL_PASSWORD=${REVENUEOS_PANEL_PASSWORD:-}
+      # Vendor side only: the Ed25519 seed that signs licence keys. Verifying a key needs
+      # nothing — the public keys ship in the package. REVENUEOS_LICENSE_SECRET is the retired
+      # HMAC secret, still read to verify keys issued before the Ed25519 scheme.
+      - REVENUEOS_LICENSE_SIGNING_KEY=${REVENUEOS_LICENSE_SIGNING_KEY:-}
       - REVENUEOS_LICENSE_SECRET=${REVENUEOS_LICENSE_SECRET:-}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}

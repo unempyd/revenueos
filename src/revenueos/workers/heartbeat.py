@@ -184,7 +184,41 @@ def _record_failures(store: Store, objective_id: int, state: dict[str, Any]) -> 
     return new_classes
 
 
-def _notify(store: Store, state: dict[str, Any], next_line: str, new_failures: list[str]) -> int:
+def convert_step(ws: Workspace, store: Store, ctx: BusinessContext, run_id: int) -> dict[str, Any]:
+    """The last link of the chain: the result is proved, so notice the clock and draft the offer.
+
+    Drafts only — `convert.ensure_offer_action` creates a pending action a human decides on, and
+    `convert.measure_offer` only reads the billing worker's last Stripe read. Nothing is sent."""
+    from .. import convert
+
+    st = convert.offer_state(ws, store, ctx)
+    aid = convert.ensure_offer_action(ws, store, ctx, customer_email=None, state=st, run_id=run_id)
+    tenants = convert.offers_for_tenants(ws)
+    customers = convert.read_customers_export(ws)
+    measured = convert.measure_offer(store, customers) if customers else 0
+    return {"offer": {"state": st["state"], "days_left": st.get("days_left"), "action_id": aid,
+                      "first_result_at": st.get("first_result_at"), "payment_link": st.get("payment_link"),
+                      "offers_measured": measured},
+            "tenant_offers": tenants,
+            "company": ctx.company_name}
+
+
+def _offer_notes(convert_state: dict[str, Any]) -> list[dict[str, Any]]:
+    """One operator note per offer action this run actually created (host's own, then tenants')."""
+    notes = []
+    o = convert_state["offer"]
+    if o.get("action_id"):
+        notes.append({"company": convert_state["company"], "date": (o.get("first_result_at") or "")[:10],
+                      "action_id": o["action_id"]})
+    for t in convert_state.get("tenant_offers") or []:
+        if t.get("action_id"):
+            notes.append({"company": t.get("company") or t.get("email"), "date": (t.get("first_result_at") or "")[:10],
+                          "action_id": t["action_id"]})
+    return notes
+
+
+def _notify(store: Store, state: dict[str, Any], next_line: str, new_failures: list[str],
+            offers: list[dict[str, Any]] | None = None) -> int:
     """A note for the operator only when a human is needed. Deduped against unread notes with the
     same key, so a heartbeat every 30 minutes does not bury the inbox in copies."""
     unread_keys = {m["ref"].get("key") for m in store.list_messages("operator", unread_only=True, limit=200)}
@@ -222,6 +256,12 @@ def _notify(store: Store, state: dict[str, Any], next_line: str, new_failures: l
              f"The {worker} worker failed and RevenueOS classified it as {klass}. "
              "Run `revenueos run " + str(worker) + "` to see the error, or `revenueos doctor`.",
              {"worker": worker, "error_class": klass})
+    for o in offers or []:
+        post(f"offer:{o['action_id']}",
+             f"{o['company']}: first measured result on {o['date']}; Pro offer drafted as action [{o['action_id']}]",
+             "RevenueOS proved a result this workspace agreed with, so the offer is drafted and waiting for you. "
+             f"Read it: revenueos today (action {o['action_id']}). Nothing is sent until you approve and execute it.",
+             {"action_id": o["action_id"]})
     return posted
 
 
@@ -286,14 +326,22 @@ class HeartbeatWorker:
         if primary:
             role_note = _maybe_role_run(ws, store, ctx, llm, primary, run_id)
 
-        messages_posted = _notify(store, state, next_line, failures_new)
+        conv = convert_step(ws, store, ctx, run_id)
+        offer = conv["offer"]
+        if offer["state"] != "none":
+            summary = summary + f" · offer: {offer['state']}"
+
+        messages_posted = _notify(store, state, next_line, failures_new, _offer_notes(conv))
 
         if mandate:
             summary = summary + f" · mandate: {mandate['path'].rsplit('/', 1)[-1]} (sha {mandate['sha']})"
         state = {**state, "mandate": mandate, "next_action": next_line, "result_events_added": results_added,
                  "failure_events_added": failures_new, "messages_posted": messages_posted,
                  "objectives_updated": [o["id"] for o in objectives],
-                 "role_run": role_note}
+                 "role_run": role_note, "offer": offer}
+        if conv["tenant_offers"]:
+            state["tenant_offers"] = conv["tenant_offers"]
         if not objectives:
             summary = summary + " · no objective set (revenueos objective add \"…\")"
-        return WorkerResult(ok=True, summary=summary, actions_created=0, details=state)
+        # The only thing the heartbeat ever creates is the Pro offer, and only as a pending draft.
+        return WorkerResult(ok=True, summary=summary, actions_created=len(_offer_notes(conv)), details=state)

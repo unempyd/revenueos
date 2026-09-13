@@ -79,6 +79,46 @@ def answers_file(tmp_path: Path) -> Path:
 
 
 @pytest.fixture(autouse=True)
+def _no_vendor_license_keys(monkeypatch):
+    """No test ever picks up this machine's real licence keys (the owner exports the signing
+    key file in the ops start scripts): every licence test brings its own keypair."""
+    for var in (
+        "REVENUEOS_LICENSE_SIGNING_KEY",
+        "REVENUEOS_LICENSE_SIGNING_KEY_FILE",
+        "REVENUEOS_LICENSE_PUBLIC_KEY",
+        "REVENUEOS_LICENSE_SECRET",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture
+def vendor_keys(monkeypatch):
+    """A throwaway Ed25519 vendor keypair for the licence tests: the private seed in
+    REVENUEOS_LICENSE_SIGNING_KEY (so `issue_license` works) and the public key in
+    REVENUEOS_LICENSE_PUBLIC_KEY (so verification never depends on the shipped vendor key).
+    Returns `{"private", "public_b64", "kid"}`."""
+    import base64
+    import hashlib
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    private = Ed25519PrivateKey.generate()
+    seed = private.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    pub_raw = private.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
+    )
+    public_b64 = base64.b64encode(pub_raw).decode("ascii")
+    monkeypatch.setenv("REVENUEOS_LICENSE_SIGNING_KEY", base64.b64encode(seed).decode("ascii"))
+    monkeypatch.setenv("REVENUEOS_LICENSE_PUBLIC_KEY", public_b64)
+    return {"private": private, "public_b64": public_b64, "kid": hashlib.sha256(pub_raw).hexdigest()[:8]}
+
+
+@pytest.fixture(autouse=True)
 def _no_homepage_network(monkeypatch):
     """homepage_signals fetches the live homepage; tests opt in by re-patching it."""
     from revenueos.workers import seo

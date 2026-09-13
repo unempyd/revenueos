@@ -45,7 +45,8 @@ database). All of it comes from the process environment, which you control:
 | `IMAP_PASSWORD` | Reading the sending mailbox for replies/bounces/stops |
 | `REVENUEOS_PANEL_PASSWORD` | The control panel's session login; required to bind it to anything but localhost |
 | `REVENUEOS_WORKER_TOKEN` | Bearer-token protection for the orchestrator's status API |
-| `REVENUEOS_LICENSE_SECRET` | Verifying (or, on the vendor side, issuing) a signed licence key |
+| `REVENUEOS_LICENSE_SIGNING_KEY` / `REVENUEOS_LICENSE_SIGNING_KEY_FILE` | Vendor side only: the Ed25519 private key that signs licence keys. Verifying a key needs nothing |
+| `REVENUEOS_LICENSE_SECRET` | Retired: verifying licence keys issued under the old HMAC scheme |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO` / `_BUSINESS` / `_AGENCY` | Hosted billing checkout and webhook handling |
 | One env var per connector (for example `AHREFS_API_KEY`, `GA4_ACCESS_TOKEN`) | That connector CLI; see `docs/integrations.md` |
 
@@ -91,11 +92,16 @@ to RevenueOS itself.
 
 A licence key unlocks a paid tier's gated capability (today, that is continuous
 orchestrator operation). Keys are signed and verified offline: a key is a payload (tier,
-customer email, expiry) plus an HMAC-SHA256 signature over that payload, checked against
-`REVENUEOS_LICENSE_SECRET`. Verification never calls out to a server — an install can
-confirm its own licence with no network access. A missing file, a missing secret, a bad
-signature, or an expired key all fail closed to the free Community tier; a licence never
-fails open.
+customer email, expiry, `alg`, `kid`) plus an **Ed25519 signature** over that payload,
+checked against the vendor public keys shipped in `billing.LICENSE_PUBLIC_KEYS` (a list, so
+keys can rotate; extend it with `REVENUEOS_LICENSE_PUBLIC_KEY` if you run your own vendor
+side). Verification needs no secret — a self-hosted install confirms the key it paid for
+offline, and holding what it takes to verify does not let anyone mint keys; only the
+vendor's private key (`REVENUEOS_LICENSE_SIGNING_KEY` / `..._FILE`) can sign one. Keys
+issued under the older HMAC scheme still verify, but only where the retired
+`REVENUEOS_LICENSE_SECRET` is set. Verification never calls out to a server. A missing
+file, a bad signature, a key from an untrusted signer, or an expired key all fail closed to
+the free Community tier; a licence never fails open.
 
 ## Reporting a vulnerability
 

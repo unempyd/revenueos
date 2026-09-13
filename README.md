@@ -148,7 +148,7 @@ either, every worker still runs its deterministic checks.
 | `discover` | prospects from lead lists or an external prospecting service, through the qualification gate (business email + website + real company; reported as found · contactable · qualified) | — | via outreach |
 | `outreach` | first-touch drafts from your canon | sends (daily cap, suppression list, unsubscribe footer) | replies, booked, pipeline value |
 | `inbox` | replies, bounces and STOP requests on your mailbox | — | feeds outreach outcomes |
-| `content` | content work matched to your channels | Claude produces the deliverable | deliverable written |
+| `content` | content work matched to your channels | Claude produces the deliverable; publishes it to WordPress after a second approval | published 0 → 1 on the live URL |
 | `monitor` | Hacker News threads that pass a strict relevance gate | — | — |
 | `measure` | — | — | records every outcome above |
 
