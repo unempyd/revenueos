@@ -188,7 +188,7 @@
       RevenueOS reads your website, ads, leads and mailbox, lists what is costing you customers,
       fixes what you approve, and proves the change before you pay anything.
     </p>
-    <pre class="demo-cmd">pip install revenueos &amp;&amp; revenueos demo https://yoursite.com</pre>
+    <pre class="demo-cmd">uvx revenueos demo https://yoursite.com</pre>
     <p class="verified">Last verified run: 2026-09-13 · two site fixes deployed by the executor and measured 0 → 1 · 210 tests passing · <a href="proof.html">the record</a></p>
     <div class="hero-ctas">
       <a class="cta-btn" href="https://github.com/unempyd/revenueos">Get it on GitHub</a>
@@ -559,7 +559,8 @@ $0 pipeline generated</pre>
     <p class="lede">No account required for Community. Install it, connect your business.</p>
     <div class="code-block">
 <pre><span class="c1"># install</span>
-pip install revenueos   <span class="c1"># or: uv tool install revenueos</span>
+uvx revenueos demo https://yoursite.com   <span class="c1"># nothing installed, one command</span>
+pip install revenueos   <span class="c1"># or: uv tool install revenueos — to keep it</span>
 
 <span class="c1"># connect your business and turn it on</span>
 revenueos init                     <span class="c1"># the questionnaire → company-context/ + revenueos.yaml</span>

@@ -1,5 +1,5 @@
 name: "RevenueOS demo"
-description: "Run RevenueOS on any website from GitHub: what is costing it customers, and which fixes RevenueOS would deploy itself. Nothing is stored."
+description: "Audit any website from your workflow: what is costing it customers, and which fixes RevenueOS deploys itself."
 author: "RevenueOS"
 branding:
   icon: "activity"

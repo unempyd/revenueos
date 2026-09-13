@@ -258,7 +258,7 @@
   }
   function render() {
     var d = clean(input.value) || "yourcompany.com";
-    outEl.textContent = "revenueos demo " + d;
+    outEl.textContent = "uvx revenueos demo " + d;
   }
   input.addEventListener("input", render);
   render();
