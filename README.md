@@ -1,5 +1,5 @@
 <p align="center"><strong>RevenueOS</strong></p>
-<h1 align="center">Connect your business. RevenueOS finds opportunities, executes approved revenue work, and measures what happened.</h1>
+<h1 align="center">Connect once. Everything runs free. Pay when you agree with the result.</h1>
 
 <p align="center">
 <a href="docs/proof.md">Runtime proof</a> ·
@@ -10,14 +10,59 @@
 <a href="capabilities/README.md">Capabilities</a>
 </p>
 
-RevenueOS is a self-hosted revenue department for one business. You answer one questionnaire.
-Its workers analyse your website, ad exports, lead lists, mailbox and the open web, and turn
-what they find into a short list of actions. Nothing sends, publishes or spends until you
-approve it. After execution, RevenueOS measures the result and shows it next to the action.
+RevenueOS is a revenue department for one business. Give it your website. It reads the site,
+your ads, your leads and your mailbox, and turns what it finds into a short list of actions:
+a site fix it can deploy itself, a wasting campaign to pause, an email to send, a call to book,
+an invoice to raise. Nothing changes until you approve it. Afterwards it re-checks the world and
+writes the before → after next to the action. You pay nothing until it has measured a result
+you agreed with.
 
 ```
-Connect → Discover → Approve → Execute → Measure
+Connect once → Discover → Approve → Execute → Measure → (agree) → Pay
 ```
+
+## Try it on your site in one command
+
+```bash
+pip install revenueos
+revenueos demo https://yoursite.com
+```
+
+No account, nothing stored. It prints what is costing the site customers and which of those
+fixes RevenueOS deploys itself once connected. A real run:
+
+```
+RevenueOS demo — Example Business® (https://example.com)
+
+  5 pages crawled · ad/analytics tags: Meta Pixel, GA4 · booking link: yes · phones: +61 8 0000 0000, +61 8 0000 0000
+
+  1. PHONE NOT TAPPABLE — the number is plain text; a visitor on a phone cannot tap to call
+     → RevenueOS writes the fix as a deliverable you approve, then re-checks the page.
+  2. NO LOCAL SCHEMA — Google cannot read the business type, address and hours
+     → RevenueOS deploys this fix itself once the site is connected (git or WordPress), then re-checks it.
+  3. NO CANONICAL
+     → RevenueOS deploys this fix itself once the site is connected, then re-checks it.
+
+  3 finding(s). Everything above runs free, every day, once connected. You pay only when you agree with a measured result.
+```
+
+## Connect once
+
+```bash
+revenueos init --from https://yoursite.com   # the site fills the questionnaire; every inference is labelled
+revenueos serve                              # TODAY / RESULTS / Connections / Spend on http://127.0.0.1:8791
+```
+
+Connections are accounts you authorise once — Stripe, Google (Search Console, GA4, Calendar, Ads),
+Meta Ads, a git-hosted site, WordPress — read-only until you flip **allow changes**. Every change
+still waits for your approval on TODAY. Details and the runtime proofs: [docs/integrations.md](docs/integrations.md).
+
+## Pay when you agree with the result
+
+Everything runs free: every worker, the panel, the executors. When RevenueOS has measured a result
+on an action you approved, it keeps running free for 14 more days, then continuous operation asks
+for Pro ($99/month). One-shot runs and the panel never lock. There is no trial clock that starts
+before you have seen a result.
 
 ## What the customer sees
 
@@ -46,7 +91,7 @@ It does not claim revenue it has not measured.
 
 ```bash
 pip install revenueos   # or: uv tool install revenueos
-revenueos init                       # the questionnaire → your business context
+revenueos init --from https://yoursite.com   # or `revenueos init` for the questionnaire
 revenueos run all                    # every worker once
 revenueos today                      # the brief
 revenueos approve 1 && revenueos execute 1

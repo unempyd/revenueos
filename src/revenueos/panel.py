@@ -37,21 +37,11 @@ except ImportError:  # pragma: no cover
     load_license = None  # type: ignore[assignment]
 
 STYLE = """
+/* Dark-first, matching website/design.css — the marketing site is a black
+   product stage, so the dashboard a customer opens after installing must not
+   arrive as a white app. Light is honoured only when explicitly preferred. */
 :root{
-  color-scheme:light dark;
-  --bg:#ffffff; --surface:#ffffff; --surface-2:#f5f5f7; --canvas:#f5f5f7;
-  --ink:#1d1d1f; --ink-2:#6e6e73; --ink-3:#86868b;
-  --line:#d2d2d7; --line-soft:#e8e8ed;
-  --accent:#0071e3; --accent-ink:#ffffff;
-  --orange:#f56900;
-  --ok:#00845a; --pend:#8a6d00;
-  --chrome:rgba(255,255,255,.72);
-  --r-card:28px; --r-btn:36px; --r-pill:980px; --r-field:10px;
-  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px;
-  --ease:cubic-bezier(.32,.72,0,1);
-  --fast:140ms; --base:280ms;
-}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark light;
   --bg:#000000; --surface:#1d1d1f; --surface-2:#111113; --canvas:#000000;
   --ink:#f5f5f7; --ink-2:#a1a1a6; --ink-3:#86868b;
   --line:#424245; --line-soft:#2c2c2e;
@@ -59,6 +49,19 @@ STYLE = """
   --orange:#ff8f3f;
   --ok:#30d158; --pend:#ffd60a;
   --chrome:rgba(29,29,31,.72);
+  --r-card:28px; --r-btn:36px; --r-pill:980px; --r-field:10px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px;
+  --ease:cubic-bezier(.32,.72,0,1);
+  --fast:140ms; --base:280ms;
+}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --bg:#ffffff; --surface:#ffffff; --surface-2:#f5f5f7; --canvas:#f5f5f7;
+  --ink:#1d1d1f; --ink-2:#6e6e73; --ink-3:#86868b;
+  --line:#d2d2d7; --line-soft:#e8e8ed;
+  --accent:#0071e3; --accent-ink:#ffffff;
+  --orange:#f56900;
+  --ok:#00845a; --pend:#8a6d00;
+  --chrome:rgba(255,255,255,.72);
 }}
 
 *{box-sizing:border-box}
@@ -321,7 +324,10 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             lic = ""
             if load_license is not None:
                 try:
-                    lic = f'<span class="none">licence: {load_license(self.ws).tier.value}</span>'
+                    from .billing import pay_on_result
+
+                    v = pay_on_result(self.ws, self.store)
+                    lic = f'<span class="none">{html.escape(v["reason"] if v["tier"] == "community" else "licence: " + v["tier"])}</span>'
                 except Exception:
                     lic = ""
             return PAGE.format(title=html.escape(title), sub=html.escape(sub), body=body, style=STYLE, nav_extra=lic,
@@ -576,6 +582,13 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             return f'<div class="brief">{html.escape(chr(10).join(lines))}</div>{run}'
 
         def _onboard_form(self) -> str:
+            once = ('<form method="post" action="/onboard" class="once"><label>Connect once: your website</label>'
+                    '<input name="from_url" placeholder="https://yourbusiness.com" required>'
+                    '<p><button class="x">Read my site and fill this in</button></p>'
+                    "<p class='sub'>RevenueOS reads the site and writes the answers below; every inference is labelled. Correct anything afterwards.</p></form>")
+            return once + self._onboard_form_full()
+
+        def _onboard_form_full(self) -> str:
             cur = {"company_name": self.ctx.company_name if self.ctx.is_onboarded() else "", "website": self.ctx.website or "",
                    "competitors": ", ".join(self.ctx.competitors), "channels": ", ".join(self.ctx.channels),
                    "sender_name": (self.ctx.config.get("sender") or {}).get("name", ""), "sender_email": (self.ctx.config.get("sender") or {}).get("email", ""),
@@ -622,6 +635,14 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                 return
             if path == "/onboard":
                 form = {k: v[0].strip() for k, v in parse_qs(body.decode("utf-8", "replace")).items() if v and v[0].strip()}
+                if form.get("from_url"):
+                    from .onboard import derive_answers
+
+                    answers, facts = derive_answers(form["from_url"], maybe_llm())
+                    if not answers:
+                        self._redirect("/onboard?msg=" + quote(f"could not read {form['from_url']}: {facts.get('error')}"))
+                        return
+                    form = {**answers, **{k: v for k, v in form.items() if k != "from_url"}}
                 if not form:
                     self._redirect("/onboard?msg=" + quote("nothing to save"))
                     return

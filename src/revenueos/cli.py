@@ -42,7 +42,15 @@ def _boot(args: argparse.Namespace) -> tuple[Workspace, Store, BusinessContext]:
 def cmd_init(args: argparse.Namespace) -> int:
     ws, _store, ctx = _boot(args)
     answers: dict[str, str] = {}
-    if args.answers:
+    if getattr(args, "from_url", None):
+        from .onboard import derive_answers
+
+        answers, facts = derive_answers(args.from_url, None if args.no_llm else maybe_llm())
+        if not answers:
+            print(f"could not read {args.from_url}: {facts.get('error')}", file=sys.stderr)
+            return 2
+        print(f"Read {facts['url']}: {len(facts.get('pages', {})) + 1} page(s). Answers written from the site" + (" and a model" if not args.no_llm and maybe_llm() else "") + "; correct any of them on the Business page.")
+    elif args.answers:
         answers = json.loads(Path(args.answers).read_text())
     else:
         print("Connect your business. Answer what you can; blank keeps the template text.\n")
@@ -64,6 +72,49 @@ def cmd_init(args: argparse.Namespace) -> int:
         print("company-context validation:", *errors, sep="\n  ")
         return 1
     print("company-context validates (canon gate). Now: `revenueos run all` then `revenueos today`.")
+    return 0
+
+
+def cmd_demo(args: argparse.Namespace) -> int:
+    """`revenueos demo https://yoursite` — one command, no setup: read the site, list what is costing it
+    customers, say which fixes RevenueOS would deploy once connected. Nothing is stored."""
+    import tempfile
+
+    from .onboard import derive_answers
+    from .paths import Workspace as _W
+    from .paths import new_workspace
+    from .workers.seo import crawl_findings, deployable_fix, homepage_signals, signal_findings
+
+    answers, facts = derive_answers(args.url, None if args.no_llm else maybe_llm())
+    if not answers:
+        print(f"could not read {args.url}: {facts.get('error')}", file=sys.stderr)
+        return 2
+    site = facts["url"]
+    sig = homepage_signals(site)
+    findings, crawl = crawl_findings(site)
+    findings += signal_findings(site, sig)
+    name = answers.get("company_name") or facts["host"]
+    print(f"RevenueOS demo — {name} ({site})\n")
+    pages = len(crawl.get("pages", [])) if crawl.get("ok") else 0
+    tags = [n for n, k in (("Meta Pixel", "meta_pixel"), ("Google Ads tag", "google_ads_tag"), ("GA4", "ga4")) if sig.get(k)]
+    print(f"  {pages} pages crawled · ad/analytics tags: {', '.join(tags) or 'none'} · booking link: {'yes' if sig.get('booking_url') else 'no'} · phones: {', '.join(sig.get('phones') or []) or 'none seen'}\n")
+    if not findings:
+        print("  Nothing wrong that a crawler can see. Connect the site and RevenueOS keeps checking, every day, for free.")
+    tmpdir = Path(tempfile.mkdtemp(prefix="revenueos-demo-"))
+    tmp = _W(new_workspace(tmpdir / "ws", Workspace.locate().root))
+    from .context import BusinessContext as _B
+
+    _B.load(tmp).onboard({"company_name": name, "website": site})
+    ctx = _B.load(tmp)
+    for i, f in enumerate(findings, 1):
+        fix = deployable_fix(f, ctx, sig)
+        print(f"  {i}. {f['kind'].replace('_', ' ').upper()} — {f['url']}\n     {f['why']}")
+        print("     → RevenueOS deploys this fix itself once the site is connected (git or WordPress), then re-checks it." if fix
+              else "     → RevenueOS writes the fix as a deliverable you approve, then re-checks the page.")
+    print(f"\n  {len(findings)} finding(s). Everything above runs free, every day, once connected:\n"
+          f"     pip install revenueos && revenueos init --from {site} && revenueos serve\n"
+          "  You pay only when you agree with a measured result.")
+    shutil.rmtree(tmpdir, ignore_errors=True)  # the demo stores nothing
     return 0
 
 
@@ -236,17 +287,18 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 
 def cmd_orchestrator(args: argparse.Namespace) -> int:
-    ws, _store, _ctx = _boot(args)
-    if not args.once:  # continuous operation is a Pro feature; one-shot runs are free
+    ws, store, _ctx = _boot(args)
+    if not args.once:  # free until a measured result the business agreed with, plus a grace period; then Pro
         try:
-            from .billing import require_tier
+            from .billing import pay_on_result
 
-            blocked = require_tier(ws, "pro")
+            verdict = pay_on_result(ws, store)
         except ImportError:
-            blocked = None
-        if blocked:
-            print(blocked, file=sys.stderr)
+            verdict = {"allowed": True, "reason": "community build"}
+        if not verdict["allowed"]:
+            print(verdict["reason"], file=sys.stderr)
             return 3
+        print(f"continuous operation: {verdict['reason']}", flush=True)
     orch = ws.root / "orchestrator"
     if not (orch / "node_modules").exists():
         subprocess.run(["npm", "install", "--silent"], cwd=orch, check=True)
@@ -364,10 +416,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"revenueos {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    s = sub.add_parser("init", help="the onboarding questionnaire")
+    s = sub.add_parser("init", help="the onboarding questionnaire — or `--from https://yoursite` to fill it from the website")
+    s.add_argument("--from", dest="from_url", help="derive the answers from this website (connect once)")
+    s.add_argument("--no-llm", action="store_true", help="facts only, no model")
     s.add_argument("--answers", help="JSON file of answers (non-interactive)")
     s.set_defaults(fn=cmd_init)
     sub.add_parser("validate", help="run the company-context gate").set_defaults(fn=cmd_validate)
+    s = sub.add_parser("demo", help="one command on any website: what is costing it customers, and what RevenueOS would fix")
+    s.add_argument("url")
+    s.add_argument("--no-llm", action="store_true")
+    s.set_defaults(fn=cmd_demo)
 
     s = sub.add_parser("today", help="the daily brief")
     s.add_argument("--json", action="store_true")

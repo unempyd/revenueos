@@ -469,6 +469,13 @@ class Store:
             out.append(a)
         return out
 
+    def first_measured_at(self) -> str | None:
+        """When the business first had a measured result on an action it approved — the pay-on-result clock."""
+        with self._conn() as c:
+            row = c.execute("SELECT MIN(o.measured_at) t FROM outcomes o JOIN actions a ON a.id=o.action_id "
+                            "WHERE o.status='measured' AND a.status='executed'").fetchone()
+            return row["t"] if row and row["t"] else None
+
     def results_summary(self) -> dict[str, Any]:
         with self._conn() as c:
             # withdrawn/superseded rows (dedupe_key suffixed by the gate or a redraft) were never findings for the customer

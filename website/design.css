@@ -56,7 +56,17 @@ h3{font-size:21px;font-weight:600;line-height:1.19;letter-spacing:-.013em;margin
   font-size:15px;font-weight:600;line-height:1.24;letter-spacing:-.011em;
   text-transform:none;color:var(--orange);margin:0 0 12px;
 }
-.lede{font-size:clamp(18px,2.1vw,21px);line-height:1.47;letter-spacing:-.012em;color:var(--platinum);max-width:52ch;margin:0 0 30px}
+/* A lede introduces; it is not a body paragraph. The markup reuses .lede for
+   both, and one instance carries 422 characters, so the size sits between an
+   intro and body and the measure is capped to Apple's readable range (45-75
+   characters). 21px over 130 characters per line is not a hierarchy, it is a
+   wall. */
+.lede{font-size:clamp(17px,1.7vw,19px);line-height:1.5;letter-spacing:-.014em;color:var(--platinum);max-width:60ch;margin:0 0 28px}
+.hero .lede{font-size:clamp(19px,2.1vw,21px);line-height:1.47;max-width:46ch}
+.install-notes,.evidence-links,.loop-legend,.brief-box pre+*{max-width:72ch}
+/* a link is already blue; a dashed rule under it reads as a placeholder */
+.todo-link{border-bottom:0}
+.todo-link:hover{text-decoration:underline}
 p{color:var(--platinum)}
 a{color:var(--halo);text-decoration:none}
 a:hover{text-decoration:underline}
@@ -165,6 +175,24 @@ ul.plain li b{color:var(--frost);font-weight:600}
 .price-card li{font-size:14px;line-height:1.43;color:var(--platinum);padding-left:22px}
 .price-card li::before{color:var(--green);font-weight:600}
 .price-card .cta-btn{width:100%}
+
+/* ── button craft (Apple: a label, not a sentence) ────────────────────── */
+/* Card content reads left-aligned; centred lists force the eye to re-find
+   the left edge on every line. Only the price block stays optically centred
+   by its own margin, not by text-align. */
+.price-card,.price-card li,.price-card .blurb,.price-card .tier-note{text-align:left}
+.price-card ul{margin-bottom:20px}
+.price-card li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:9px;padding-left:0}
+.price-card li::before{position:static;color:var(--green);font-weight:600;line-height:1.43}
+/* one line, one job — the explanation lives in .tier-note above */
+.cta-btn{white-space:nowrap;padding-inline:24px}
+.price-card .cta-btn{white-space:normal}
+.cta-btn.block{width:100%}
+/* inline code inside a tier must not read as a highlighted link */
+.price-card code,.tier-note code,ul.plain code{
+  background:rgba(255,255,255,.07);color:var(--frost);
+  border-radius:6px;padding:2px 6px;font-size:13px;
+}
 .see-all{margin-top:28px;font-size:17px}
 
 /* ── code ─────────────────────────────────────────────────────────────── */
@@ -177,11 +205,40 @@ ul.plain li b{color:var(--frost);font-weight:600}
 .install-notes{font-size:15px;color:var(--platinum)}
 .install-notes code{background:rgba(255,255,255,.08);color:var(--halo);border-radius:6px;padding:2px 7px;font-size:13px}
 
-/* ── tables (proof page) ──────────────────────────────────────────────── */
-table{border-collapse:collapse;width:100%;background:var(--obsidian);border:1px solid var(--smoke);border-radius:var(--r-card);overflow:hidden}
-th{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--platinum);padding:14px 16px;text-align:left;border-bottom:1px solid var(--smoke)}
-td{padding:14px 16px;font-size:15px;color:var(--platinum);border-bottom:1px solid var(--smoke);vertical-align:top}
-tr:last-child td{border-bottom:0}
+/* ── tables ───────────────────────────────────────────────────────────────
+   pricing.html hardcodes light hex for its zebra and group rows
+   (tbody tr:nth-child(odd){background:#fcfcfd}; .group-row th{#f4f4fb}).
+   Token remapping cannot reach a literal, and those selectors outrank a bare
+   td/th, so each is overridden explicitly at matching specificity. Row
+   separation here is a hairline, not a fill — alternating light/dark bands
+   strobe against a dark page.                                             */
+.table-wrap{
+  background:var(--obsidian);border:1px solid var(--smoke);
+  border-radius:var(--r-card);overflow:hidden;
+}
+.table-wrap table{border-collapse:collapse;width:100%;background:transparent}
+.table-wrap thead th{
+  background:transparent;color:var(--frost);
+  font-size:12px;font-weight:600;letter-spacing:-.01em;
+  padding:18px;border-bottom:1px solid var(--smoke);
+}
+.table-wrap thead .tierprice{color:var(--platinum);font-weight:400;font-size:13px}
+.table-wrap tbody th{
+  color:var(--frost);font-weight:400;font-size:15px;letter-spacing:-.016em;
+  text-transform:none;padding:14px 18px;border-bottom:1px solid var(--line-soft,rgba(255,255,255,.06));
+}
+.table-wrap tbody td{
+  color:var(--platinum);font-size:15px;text-align:center;padding:14px 10px;
+  border-bottom:1px solid rgba(255,255,255,.06);vertical-align:middle;
+}
+.table-wrap tbody tr:nth-child(odd){background:transparent}
+.table-wrap tbody tr:hover{background:rgba(255,255,255,.03)}
+.table-wrap .group-row th{
+  background:var(--carbon);color:var(--orange);
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  padding:14px 18px;
+}
+.table-wrap tbody tr:last-child th,.table-wrap tbody tr:last-child td{border-bottom:0}
 
 /* ── footer ───────────────────────────────────────────────────────────── */
 footer{background:var(--obsidian);color:var(--platinum);font-size:13px;padding-block:44px}
@@ -221,6 +278,32 @@ body.nav-open{overflow:hidden}
   body.nav-open header.topnav{z-index:41}
 }
 @media (min-width:901px){ .navsheet,.navscrim{display:none} }
+
+/* ── cross-document transitions ───────────────────────────────────────────
+   index -> pricing -> proof now cross-fade instead of hard-cutting. One
+   declaration; browsers without support simply navigate as before.        */
+@view-transition{navigation:auto}
+::view-transition-old(root),::view-transition-new(root){animation-duration:var(--t-base);animation-timing-function:var(--ease)}
+/* the chrome is continuous across pages, so it must not cross-fade with the body */
+header.topnav{view-transition-name:chrome}
+
+/* ── micro-interactions: every interactive surface responds on press ──────
+   Apple's rule is feedback on pointer-DOWN, not on release. These were on
+   .cta-btn only; a link or a chip that stays inert while a button reacts
+   reads as two different products.                                        */
+a,button,summary,.chip,.tick,.txtlink{
+  -webkit-tap-highlight-color:transparent;
+  transition:opacity var(--t-fast) var(--ease),color var(--t-fast) var(--ease),
+             background-color var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),
+             transform var(--t-fast) var(--ease);
+}
+a:active,summary:active{opacity:.62}
+.chip:hover{border-color:var(--silver);color:var(--frost)}
+.evidence-shots figure{transition:transform var(--t-base) var(--ease)}
+.evidence-shots figure:hover{transform:translateY(-2px)}
+.see-all:hover,.evidence-links a:hover{color:var(--frost)}
+/* a moving element gets its own layer only while motion is imminent */
+.cta-btn,.price-card,.evidence-shots figure{will-change:transform}
 
 /* ── motion ───────────────────────────────────────────────────────────── */
 .rv{opacity:0;transform:translate3d(0,24px,0)}

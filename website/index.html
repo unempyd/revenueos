@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RevenueOS — Connect your business.</title>
-<meta name="description" content="RevenueOS finds opportunities, executes approved revenue work, and measures what happened. Self-hosted, MIT-licensed, and proven on a real business run — see the evidence.">
+<title>RevenueOS — Connect once. Pay when you agree with the result.</title>
+<meta name="description" content="Give RevenueOS your website. It lists what is costing you customers, fixes what you approve, and measures the change. Everything runs free; you pay only after a result you agreed with. Open source, MIT.">
 <style>
   :root{
     --bg:#fafaf9; --panel:#ffffff; --ink:#0f172a; --ink-soft:#44506b; --muted:#6b7280;
@@ -127,7 +127,9 @@
   .foot-row{display:flex; flex-wrap:wrap; gap:18px; justify-content:space-between; align-items:flex-start; font-size:13.5px; color:var(--muted)}
   .foot-links{display:flex; gap:18px; flex-wrap:wrap}
   .foot-links a{color:var(--ink-soft)}
+.demo-cmd{display:inline-block;margin:18px auto 0;padding:12px 18px;border-radius:12px;background:#111;color:#fff;font:14px ui-monospace,Menlo,monospace;text-align:left;max-width:100%;overflow-x:auto}
 </style>
+<link rel="stylesheet" href="design.css">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "RevenueOS", "url": "https://unempyd.github.io/revenueos/", "description": "We give small businesses a self-hosted revenue department that finds opportunities, executes approved revenue work, and measures what happened."}</script>
 <link rel="canonical" href="https://unempyd.github.io/revenueos/">
 </head>
@@ -144,6 +146,7 @@
       <a href="#inside">Built in the open</a>
       <a href="proof.html">Proof</a>
     </nav>
+    <button class="navbtn" aria-expanded="false" aria-label="Open menu"><span></span><span></span><span></span></button>
     <a class="cta-btn small nav-cta" href="#install">Install free</a>
   </div>
 </header>
@@ -152,13 +155,14 @@
 
   <section class="hero">
     <div class="eyebrow">Self-hosted revenue automation</div>
-    <h1>Connect your business.</h1>
+    <h1>Connect once. Everything runs free.<br>Pay when you agree with the result.</h1>
     <p class="lede center">
-      RevenueOS finds opportunities, executes approved revenue work, and measures what
-      happened.
+      RevenueOS reads your website, ads, leads and mailbox, lists what is costing you customers,
+      fixes what you approve, and proves the change before you pay anything.
     </p>
+    <pre class="demo-cmd">pip install revenueos &amp;&amp; revenueos demo https://yoursite.com</pre>
     <div class="hero-ctas">
-      <a class="cta-btn" href="https://github.com/unempyd/revenueos">Get RevenueOS on GitHub — Community</a>
+      <a class="cta-btn" href="https://github.com/unempyd/revenueos">Get it on GitHub</a>
       <a class="cta-btn ghost" href="pricing.html">See pricing</a>
     </div>
     <div class="hero-note">Self-hosted. Your business context and results stay in your
@@ -178,7 +182,8 @@
           <div class="title">revenueos today</div>
           <pre>TODAY — Plausible Analytics
 
-  6 content opportunities
+  2 SEO opportunities found
+  3 content opportunities
 $0 pipeline generated</pre>
           <div class="approve-row">
             <span class="chip">Approve</span><span class="chip">Execute</span><span class="chip">Ignore</span>
@@ -187,36 +192,34 @@ $0 pipeline generated</pre>
         <div class="brief-box">
           <div class="title">revenueos results</div>
           <pre>RESULTS — Plausible Analytics
-6 opportunities found · 1 executed · 1 measured
-✓ [ 1] seo: seo-content-brief   deliverable_written 0 → 1</pre>
+5 opportunities found · 1 executed · 1 measured
+✓ [ 4] seo: seo-content-strategy   deliverable_written 0 → 1</pre>
         </div>
       </div>
       <div class="evidence-shots">
         <figure>
-          <img src="screenshots/today.png" width="1280" height="900" loading="lazy"
-            alt="RevenueOS today brief screen listing six content opportunities found for Plausible Analytics, each with Approve, Execute and Ignore controls">
+          <img fetchpriority="high" decoding="async" src="screenshots/today-current.png" width="1280" height="900"
+            alt="RevenueOS today brief screen listing five opportunities found for Plausible Analytics — two SEO, three content, each with Approve, Execute and Ignore controls">
           <figcaption>The brief — every opportunity found, waiting on a decision.</figcaption>
         </figure>
         <figure>
-          <img src="screenshots/results.png" width="1280" height="900" loading="lazy"
-            alt="RevenueOS results screen showing 6 opportunities found, 1 executed, 1 measured, with the seo-content-brief action marked deliverable_written 0 to 1">
+          <img decoding="async" src="screenshots/results-current.png" width="1280" height="900" loading="lazy"
+            alt="RevenueOS results screen showing 5 opportunities found, 1 executed, 1 measured, with the seo-content-strategy action marked deliverable_written 0 to 1">
           <figcaption>The results ledger — what ran, and what it produced.</figcaption>
         </figure>
       </div>
     </div>
 
     <ul class="plain evidence-list">
-      <li><span class="tick">✓</span><span><b>Date</b> 2026-09-12.</span></li>
+      <li><span class="tick">✓</span><span><b>Date</b> 2026-09-13.</span></li>
       <li><span class="tick">✓</span><span><b>Business</b> Plausible Analytics
         (plausible.io) — a real company's public web presence, used read-only. No email
         was sent to anyone.</span></li>
       <li><span class="tick">✓</span><span><b>Found</b> a real crawl of plausible.io, a
         Hacker News search through the relevance gate, and the content registry matched
-        against the business's channels together produced 6 content opportunities across
-        seo, blog and twitter.</span></li>
+        against the business's channels together produced 5 opportunities — two SEO, three content.</span></li>
       <li><span class="tick">✓</span><span><b>Executed</b> 1 — Claude ran the vendored
-        <code>seo-content-brief</code> skill and wrote a 14&nbsp;KB deliverable in 1&nbsp;m
-        23&nbsp;s.</span></li>
+        <code>seo-content-strategy</code> skill and wrote the deliverable.</span></li>
       <li><span class="tick">✓</span><span><b>Measured</b>
         <code>deliverable_written 0 → 1</code> — what RevenueOS can observe for a content
         action without Search Console connected.</span></li>
@@ -293,7 +296,7 @@ $0 pipeline generated</pre>
           <li>Historical reporting &amp; persistent memory</li>
         </ul>
         <div class="tier-note">Early access: we connect RevenueOS to your business, you see every finding on TODAY and approve each action, and you pay the first month only after the first measured result appears in RESULTS.</div>
-        <a class="cta-btn" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+pro">Early access — pay after your first measured result</a>
+        <a class="cta-btn" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+pro">Get early access</a>
       </div>
 
       <div class="price-card">
@@ -307,7 +310,7 @@ $0 pipeline generated</pre>
         </ul>
         <div class="tier-note">Hosted: we run the orchestrator and panel for you; a
           signed licence key unlocks continuous operation on self-hosted installs.</div>
-        <a class="cta-btn ghost" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+business">Request Business (hosted, by arrangement)</a>
+        <a class="cta-btn ghost" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+business">Request Business</a>
       </div>
 
       <div class="price-card">
@@ -321,7 +324,7 @@ $0 pipeline generated</pre>
         </ul>
         <div class="tier-note">Hosted: we run the orchestrator and panel for you; a
           signed licence key unlocks continuous operation on self-hosted installs.</div>
-        <a class="cta-btn ghost" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+agency">Request Agency (hosted, by arrangement)</a>
+        <a class="cta-btn ghost" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+agency">Request Agency</a>
       </div>
     </div>
     <a class="see-all" href="pricing.html">Compare every feature, tier by tier →</a>
@@ -387,5 +390,6 @@ revenueos serve                    <span class="c1"># the control panel: http://
   </div>
 </footer>
 
+<script src="site.js" defer></script>
 </body>
 </html>

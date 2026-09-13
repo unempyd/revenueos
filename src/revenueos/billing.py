@@ -233,6 +233,30 @@ def require_tier(ws: Workspace, minimum: Tier) -> str | None:
     )
 
 
+FREE_DAYS_AFTER_FIRST_RESULT = 14
+
+
+def pay_on_result(ws: Workspace, store: Any) -> dict[str, Any]:
+    """The commercial rule in one place: everything runs free until the business has a measured result it
+    agreed with (executed → measured), then FREE_DAYS_AFTER_FIRST_RESULT more days, then continuous operation
+    asks for Pro. One-shot runs and the panel never lock. Returns {allowed, reason, first_result_at, days_left, tier}."""
+    lic = load_license(ws)
+    if TIER_ORDER[lic.tier] >= TIER_ORDER[Tier.pro]:
+        return {"allowed": True, "reason": f"{TIER_LABELS[lic.tier]} licence", "tier": lic.tier.value, "first_result_at": None, "days_left": None}
+    first = store.first_measured_at() if hasattr(store, "first_measured_at") else None
+    if not first:
+        return {"allowed": True, "reason": "free until your first measured result", "tier": lic.tier.value, "first_result_at": None, "days_left": None}
+    since = (datetime.now(UTC) - _parse_iso(first)).days
+    left = FREE_DAYS_AFTER_FIRST_RESULT - since
+    if left > 0:
+        return {"allowed": True, "reason": f"first measured result on {first[:10]}; free for {left} more day(s)", "tier": lic.tier.value,
+                "first_result_at": first, "days_left": left}
+    return {"allowed": False, "tier": lic.tier.value, "first_result_at": first, "days_left": 0,
+            "reason": (f"RevenueOS measured a result you agreed with on {first[:10]} and has run free for {FREE_DAYS_AFTER_FIRST_RESULT} days since. "
+                       f"Continuous operation now needs Pro (${TIER_PRICES[Tier.pro]}/mo): pay at the link on the pricing page, install the key with "
+                       "`revenueos license install <key>`. One-shot runs (`revenueos run …`) and the panel stay free.")}
+
+
 # ── Stripe: vendor side ──────────────────────────────────────────────────────
 def create_checkout_session(
     tier: Tier,
