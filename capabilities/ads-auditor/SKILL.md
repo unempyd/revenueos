@@ -8,10 +8,17 @@ metadata:
 
 # RevenueOS Ads Auditor
 
-RevenueOS Ads Auditor ingests a CSV export from any of twelve ad platforms and runs
-deterministic checks that need no LLM: campaigns spending money with zero conversions,
-campaigns pacing more than 25% over their daily budget, and single campaigns holding more
-than 60% of total spend. Each finding becomes an `ad_waste` or `campaign_attention` action.
+RevenueOS Ads Auditor ingests a CSV export from any of twelve ad platforms (or reads a
+connected Google Ads / Meta account) and runs two layers. First, deterministic checks that
+need no model: campaigns spending money with zero conversions, campaigns pacing more than
+25% over their daily budget, and single campaigns holding more than 60% of total spend.
+Second, the full control audit: every control in the vendored catalogue (414 across the
+twelve platforms; 97 for Google, 72 for Meta) is evaluated against the account snapshot
+under the catalogue's own runtime contract — pass or fail only with evidence from the
+data, `unknown` when the evidence is absent, `not_applicable` when the surface does not
+apply, never a fixed platform-wide threshold. Each failing control becomes a
+`campaign_attention` action the owner approves; the next audit re-checks it and records
+the change. No health score is invented: the catalogue ships its scoring disabled.
 
 ## When to use this
 

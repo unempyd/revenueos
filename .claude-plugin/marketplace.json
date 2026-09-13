@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "RevenueOS Community: connect, analyse, and see the opportunity, action and measured result for a real business — SEO, ads, lead discovery, sales follow-up, marketing intelligence and revenue monitoring, wrapped as Agent Skills over the revenueos CLI and MCP server.",
-    "version": "0.2.1"
+    "version": "0.2.2"
   },
   "plugins": [
     {
       "name": "revenueos",
       "source": ".",
       "description": "Six RevenueOS Community capabilities (SEO Auditor, Ads Auditor, Lead Discovery, Sales Follow-up, Marketing Intelligence, Revenue Monitor) plus the revenueos-mcp server. Nothing sends, publishes or spends without an explicit human approval.",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "author": {
         "name": "RevenueOS"
       },

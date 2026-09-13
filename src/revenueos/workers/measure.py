@@ -131,6 +131,24 @@ def measure_ads(ws: Workspace, store: Store, action: dict[str, Any]) -> tuple[st
                                                        "after_value": after["spend"], "before": before, "after": after}
 
 
+def measure_control(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """A failing ads control is measured by the next control audit: pass → measured, still fail → no_effect."""
+    c = action["context"]
+    path = ws.exports / f"ads-{c.get('platform')}.controls.json"
+    if not path.exists():
+        return "pending", {"note": "no control audit since the action"}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    before_end = (c.get("before") or {}).get("window_end")
+    if data.get("window", {}).get("end") and before_end and data["window"]["end"] <= before_end:
+        return "pending", {"note": "no newer control audit yet"}
+    f = next((x for x in data.get("findings", []) if x.get("control_id") == c.get("control_id")), None)
+    if not f:
+        return "pending", {"note": "control not in the latest audit"}
+    passed = f.get("status") == "pass"
+    return ("measured" if passed else "no_effect"), {"metric": "control_pass", "before_value": 0.0, "after_value": float(passed),
+                                                    "before": c.get("before"), "after": {"status": f.get("status"), "window_end": data.get("window", {}).get("end")}}
+
+
 def measure_content(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     outputs = sorted(ws.outputs.glob(f"*-{action['id']}.md"))
     if outputs:
@@ -156,6 +174,8 @@ class MeasureWorker:
                     status, data = measure_seo(store, action)
                 elif atype == "follow_up" and action["context"].get("executor") == "send_email":
                     status, data = measure_send(store, action)
+                elif action["context"].get("kind") == "control_fail":
+                    status, data = measure_control(ws, action)
                 elif atype in ("ad_waste", "campaign_attention"):
                     status, data = measure_ads(ws, store, action)
                 elif atype == "content_opportunity" or action["context"].get("executor") == "run_skill":

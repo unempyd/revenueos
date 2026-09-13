@@ -128,6 +128,7 @@
   .foot-links{display:flex; gap:18px; flex-wrap:wrap}
   .foot-links a{color:var(--ink-soft)}
 .demo-cmd{display:inline-block;margin:18px auto 0;padding:12px 18px;border-radius:12px;background:#111;color:#fff;font:14px ui-monospace,Menlo,monospace;text-align:left;max-width:100%;overflow-x:auto}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>
 <link rel="stylesheet" href="design.css">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "RevenueOS", "url": "https://unempyd.github.io/revenueos/", "description": "We give small businesses a self-hosted revenue department that finds opportunities, executes approved revenue work, and measures what happened."}</script>
@@ -254,14 +255,33 @@ $0 pipeline generated</pre>
     <h2>Connect → Discover → Approve → Execute → Measure</h2>
     <p class="lede">One loop, running on your schedule. Every step writes to one place;
       nothing skips the approval step.</p>
-    <div class="loop">
-      <div class="loop-step"><div class="n">01</div><div class="label">Connect</div><p>Answer the questionnaire — in the CLI or the panel's onboarding form. RevenueOS reads your business, competitors, channels and offer.</p></div>
-      <div class="loop-step"><div class="n">02</div><div class="label">Discover</div><p>Workers analyse your site, ad exports, lead lists, mailbox and Hacker News — deterministically, or with an LLM where judgment is needed.</p></div>
-      <div class="loop-step"><div class="n">03</div><div class="label">Approve</div><p>Every finding becomes one action, and every action waits. Nothing sends, publishes or spends without your decision.</p></div>
-      <div class="loop-step"><div class="n">04</div><div class="label">Execute</div><p>Approved actions run: the approved email sends, or the approved skill runs and writes its deliverable.</p></div>
-      <div class="loop-step"><div class="n">05</div><div class="label">Measure</div><p>RevenueOS checks what actually happened: a re-crawl, a reply, the next export's delta, a deliverable written.</p></div>
+    <div class="loopdemo">
+      <div class="stages" role="list" aria-label="The five stages of the loop">
+        <span class="stage-chip" role="listitem"><i></i>Connect</span>
+        <span class="stage-chip" role="listitem"><i></i>Discover</span>
+        <span class="stage-chip" role="listitem"><i></i>Approve</span>
+        <span class="stage-chip" role="listitem"><i></i>Execute</span>
+        <span class="stage-chip" role="listitem"><i></i>Measure</span>
+      </div>
+
+      <div class="term">
+        <div class="term-bar"><b>revenueos</b> <span>— a real run against plausible.io, 2026-09-13</span></div>
+        <div class="term-body" role="log" aria-live="polite" aria-label="Terminal output"></div>
+        <div style="padding:0 20px 20px">
+          <div class="demo-card">
+            <span class="k">SEO opportunity</span>
+            <span class="t">An SEO content plan: the searches to target and the pages to write</span>
+            <div class="demo-row">
+              <button class="demo-btn" data-act="approve" tabindex="-1" aria-hidden="true">Approve</button>
+              <button class="demo-btn fill" data-act="execute" tabindex="-1" aria-hidden="true">Execute</button>
+              <span class="measured">✓ deliverable_written 0 → 1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <button class="replay" type="button">Replay</button>
     </div>
-    <p class="loop-legend">Community runs this loop by hand, one command at a time. Pro and above turn it on and leave it running.</p>
+<p class="loop-legend">Community runs this loop by hand, one command at a time. Pro and above turn it on and leave it running.</p>
   </section>
 
   <section id="pricing">
@@ -376,6 +396,110 @@ revenueos serve                    <span class="c1"># the control panel: http://
 
 </main>
 
+
+<!-- ACT: the free audit — their lead magnet, but ours actually runs -->
+<section class="stage stage-carbon" id="audit">
+  <div class="wrap narrow">
+    <div class="rv">
+      <p class="eyebrow">Free audit</p>
+      <h2 class="sec-h">Point it at any site. Including a competitor&rsquo;s.</h2>
+      <p class="lede">RevenueOS reads a public web presence and nothing else — no account, no access, no credentials. Type a domain and it builds your command.</p>
+    </div>
+    <div class="audit rv">
+      <div class="audit-form">
+        <label for="auditurl" class="sr-only">Website to audit</label>
+        <input class="audit-input" id="auditurl" type="text" inputmode="url" spellcheck="false"
+               placeholder="yourcompany.com" value="plausible.io" aria-describedby="auditnote">
+        <a class="cta-btn" href="#install">Install it free</a>
+      </div>
+      <div class="audit-out">
+        <code><span class="p">$</span> <span id="auditcmd">revenueos demo plausible.io</span></code>
+        <button class="copy" type="button" data-copy="#auditcmd">Copy</button>
+      </div>
+      <p class="audit-note" id="auditnote">Read-only. It crawls what is already public, reports what it cannot reach instead of guessing, and sends nothing to anyone.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ACT: what it reads — the integration signal -->
+<section class="stage stage-black" id="stack">
+  <div class="wrap narrow">
+    <div class="rv">
+      <p class="eyebrow">Works with</p>
+      <h2 class="sec-h">It reads the stack you already pay for.</h2>
+      <p class="lede">64 connectors ship in the box. These are the ones wired into a worker today — the rest are available to the skills.</p>
+    </div>
+    <div class="stack rv">
+      <div class="stack-row">
+        <span class="stack-tag on">Google Ads</span><span class="stack-tag on">Meta Ads</span>
+        <span class="stack-tag on">Google Analytics 4</span><span class="stack-tag on">Search Console</span>
+        <span class="stack-tag on">Stripe</span><span class="stack-tag on">Shopify</span>
+        <span class="stack-tag on">WordPress</span><span class="stack-tag on">SMTP / IMAP</span>
+        <span class="stack-tag on">Plausible</span><span class="stack-tag on">Hacker News</span>
+      </div>
+      <p class="caption">Available to skills, not yet wired to a worker: <span class="stack-tag off">Apollo</span> <span class="stack-tag off">Hunter</span> <span class="stack-tag off">Clearbit</span> <span class="stack-tag off">Semrush</span> <span class="stack-tag off">Ahrefs</span> <span class="stack-tag off">HubSpot</span> <span class="stack-tag off">Klaviyo</span> <span class="stack-tag off">+ 47 more</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- ACT: why — stated as things that are checkable, not adjectives -->
+<section class="stage stage-carbon" id="why">
+  <div class="wrap">
+    <div class="rv">
+      <p class="eyebrow">Why this one</p>
+      <h2 class="sec-h">Four things you can check yourself.</h2>
+    </div>
+    <div class="reasons rv">
+      <div class="reason"><span class="num">01</span><div>
+        <h3>Nothing acts without you</h3>
+        <ul><li>Workers only read and propose — they cannot send, publish or spend</li>
+        <li>Sending is additionally capped, suppression-listed and STOP-aware</li></ul></div></div>
+      <div class="reason"><span class="num">02</span><div>
+        <h3>It refuses to invent a number</h3>
+        <ul><li>An outcome is measured, no_effect, or unmeasurable with the reason</li>
+        <li>Our own proof page shows $0 pipeline because no lead was contacted</li></ul></div></div>
+      <div class="reason"><span class="num">03</span><div>
+        <h3>You own the install</h3>
+        <ul><li>MIT-licensed, self-hosted, SQLite state on your machine</li>
+        <li>Only the prompts for approved work reach the LLM you configure</li></ul></div></div>
+      <div class="reason"><span class="num">04</span><div>
+        <h3>Every part is attributed</h3>
+        <ul><li>Upstream repository, commit and licence recorded for each component</li>
+        <li>Copyleft code runs across a process boundary, never bundled in</li></ul></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ACT: FAQ — objections answered without a support ticket -->
+<section class="stage stage-black" id="faq">
+  <div class="wrap narrow">
+    <div class="rv">
+      <p class="eyebrow">Questions</p>
+      <h2 class="sec-h">The things people ask first.</h2>
+    </div>
+    <div class="faq rv">
+      <details open><summary>Do I have to give you access to anything?</summary>
+        <p>No. The audit reads your public web presence only — the same pages anyone can load. Connectors exist for Google, Meta, Stripe and others, but they are opt-in, stay read-only until you explicitly allow changes, and the install runs on your machine.</p></details>
+      <details><summary>What stops it emailing my customers by mistake?</summary>
+        <p>Workers are structurally incapable of sending. Only an action you approve can act, and sending is additionally bounded by a daily cap, a suppression list, a List-Unsubscribe header and reply-STOP handling.</p></details>
+      <details><summary>Is there a free tier, or is it a trial?</summary>
+        <p>Community is free permanently and is not a trial — every worker, the full skill catalogue, and the control panel. Paid tiers add continuous operation via the orchestrator; you always own the install either way.</p></details>
+      <details><summary>How many customers do you have?</summary>
+        <p>None yet. RevenueOS went public on 2026-09-12 and has zero paying customers, zero stars and $0 revenue. The proof page is a real run against a real company&rsquo;s public site, not a case study, and there are no testimonials on this page because there is nobody to quote.</p></details>
+      <details><summary>What does it not do?</summary>
+        <p>Live ad-platform ingestion is CSV export only. Reddit monitoring is not built. Multi-brand and multi-user are single-workspace today. The authority-comparison endpoint returns HTTP 403 and is reported as unavailable rather than guessed.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- ACT: the close -->
+<section class="stage stage-carbon">
+  <div class="wrap narrow closer rv">
+    <h2 class="sec-h">Run it on your own site in a minute.</h2>
+    <p class="lede">No account. No card. It reads what is public and tells you what it found.</p>
+    <div class="hero-ctas" style="justify-content:center"><a class="cta-btn" href="#install">Install free</a><a class="cta-btn ghost" href="#audit">Audit a site first</a></div>
+  </div>
+</section>
 <footer>
   <div class="wrap foot-row">
     <div>© 2026 RevenueOS. Open-source core (MIT). Nothing sends, publishes or spends

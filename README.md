@@ -116,7 +116,10 @@ either, every worker still runs its deterministic checks.
 | Worker | Discovers | Executes (after approval) | Measures |
 |---|---|---|---|
 | `seo` | crawl defects, authority gap, indexing surface | the matching SEO skill | re-crawl: fixed or not |
-| `ads-audit` | wasted spend, over-pacing, concentration in ad exports | the matching ads skill | next export delta |
+| `ads-audit` | wasted spend, over-pacing, concentration in ad exports, then the full control audit: 97 Google / 72 Meta controls (414 across 12 platforms) evaluated under the upstream runtime contract, pass/fail only with evidence | the matching ads skill | next export delta; a failing control re-checked by the next audit |
+| `ads-live` | the same on connected Google Ads / Meta accounts; wasting campaigns become pause / budget actions | `ads_pause`, `ads_budget` | next spend read |
+| `analytics` | Search Console queries losing clicks, GA4 channel results | the title/description skill | next Search Console read |
+| `billing` | Stripe revenue, MRR, customers, open invoices | `send_invoice` | Stripe paid status |
 | `discover` | prospects from lead lists or an external prospecting service, through the qualification gate (business email + website + real company; reported as found · contactable · qualified) | — | via outreach |
 | `outreach` | first-touch drafts from your canon | sends (daily cap, suppression list, unsubscribe footer) | replies, booked, pipeline value |
 | `inbox` | replies, bounces and STOP requests on your mailbox | — | feeds outreach outcomes |

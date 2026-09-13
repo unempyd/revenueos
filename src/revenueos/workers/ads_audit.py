@@ -32,7 +32,7 @@ from ..store import Store
 from ..vendor.claude_ads_core import ContractError, GenericCSVExportAdapter, ScoringError, score_account
 from ..vendor.claude_ads_core.adapters import AdapterError
 from ..vendor.claude_ads_core.reporting import render_markdown
-from . import WorkerResult
+from . import WorkerResult, ads_controls
 
 PLATFORMS = ("google", "meta", "youtube", "linkedin", "tiktok", "microsoft", "apple", "amazon", "reddit", "pinterest", "snapchat", "x")
 SKILL_FOR = {"google": "ads/ads-google", "meta": "ads/ads-meta", "youtube": "ads/ads-youtube",
@@ -176,6 +176,15 @@ class AdsAuditWorker:
                     score_note = f", health {result.health_score} ({result.status}) → {report.relative_to(ws.root)}"
                 except (KeyError, ScoringError, ContractError, ValueError) as exc:
                     errors.append(f"{findings_path.name}: {exc}")
+            try:
+                ctl = ads_controls.audit(ws, store, ctx, llm, run_id, platform, snapshot, path.name)
+            except Exception as exc:  # the control audit never blocks the deterministic checks
+                ctl = {"note": f"control audit failed: {type(exc).__name__}: {exc}"}
+            if "checked" in ctl:
+                created += ctl.get("created", 0)
+                score_note += f", {ctl['checked']} controls: {ctl['fail']} fail / {ctl['pass']} pass / {ctl['unknown']} unknown → {ctl['report']}"
+            elif ctl.get("note"):
+                score_note += f", {ctl['note']}"
             audited.append(f"{platform} ({len(camps)} campaigns{score_note})")
         summary = f"{created} ad action(s); audited {', '.join(audited) or 'nothing'}."
         if errors:

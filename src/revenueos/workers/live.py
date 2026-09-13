@@ -16,7 +16,7 @@ from ..context import BusinessContext
 from ..llm import LLM
 from ..paths import Workspace
 from ..store import Store
-from . import WorkerResult
+from . import WorkerResult, ads_controls
 
 
 class BillingWorker:
@@ -110,7 +110,10 @@ class AdsLiveWorker:
                         context={"executor": "ads_pause", "platform": "google", "campaign_id": c["id"], "campaign_name": c["name"],
                                  "before": {"cost_28d": c["cost"], "conversions": c["conversions"], "status": c["status"]}})
                     created += 1 if aid else 0
-                parts.append(f"Google Ads {spend:.2f} spend, {len(camps)} campaigns")
+                snap = ads_controls.snapshot_from_campaigns("google", cs.get("google").meta.get("ads_customer_id") or "google", (ctx.config.get("ads") or {}).get("currency", "USD"), camps)
+                ctl = ads_controls.audit(ws, store, ctx, llm, run_id, "google", snap, "google-ads-api")
+                created += ctl.get("created", 0)
+                parts.append(f"Google Ads {spend:.2f} spend, {len(camps)} campaigns" + (f", {ctl['checked']} controls: {ctl['fail']} fail" if "checked" in ctl else f" ({ctl.get('note')})"))
             except PermissionDenied as e:
                 parts.append(f"Google Ads: {e}")
         if cs.get("meta"):
@@ -126,7 +129,10 @@ class AdsLiveWorker:
                         context={"executor": "ads_pause", "platform": "meta", "campaign_id": c["id"], "campaign_name": c["name"],
                                  "before": {"spend_28d": c["spend"], "results": c["results"], "status": c["status"]}})
                     created += 1 if aid else 0
-                parts.append(f"Meta {spend:.2f} spend, {len(rows)} campaigns")
+                snap = ads_controls.snapshot_from_campaigns("meta", cs.get("meta").meta.get("ad_account") or "meta", (ctx.config.get("ads") or {}).get("currency", "USD"), rows)
+                ctl = ads_controls.audit(ws, store, ctx, llm, run_id, "meta", snap, "meta-marketing-api")
+                created += ctl.get("created", 0)
+                parts.append(f"Meta {spend:.2f} spend, {len(rows)} campaigns" + (f", {ctl['checked']} controls: {ctl['fail']} fail" if "checked" in ctl else f" ({ctl.get('note')})"))
             except PermissionDenied as e:
                 parts.append(f"Meta: {e}")
         if not parts:
