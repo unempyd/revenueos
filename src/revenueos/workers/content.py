@@ -98,7 +98,12 @@ def customer_facing(skill: dict[str, Any], channel: str, ctx: BusinessContext) -
     if len(what) < 12:
         return None
     label = channel.strip().title().replace("Seo", "SEO").replace("Linkedin", "LinkedIn").replace("Github", "GitHub").replace("Tiktok", "TikTok")
-    where = ctx.company_name + (f" ({ctx.manifest.get('category')})" if ctx.manifest.get("category") else "")
+    from ..context import _is_placeholder
+
+    category = (ctx.manifest.get("category") or "").strip()
+    if _is_placeholder(category) or category.lower().startswith(("replace", "your ")):
+        category = ""  # an unfilled template line is not the customer's category
+    where = ctx.company_name + (f" ({category})" if category else "")
     title = f"{label}: {what[0].upper() + what[1:]}"
     content = (f"What you get: {what}, written for {where} from your business profile. "
                "You approve it before anything is published.")

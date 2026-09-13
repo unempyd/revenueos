@@ -10,12 +10,14 @@
 <a href="capabilities/README.md">Capabilities</a>
 </p>
 
-RevenueOS is a revenue department for one business. Give it your website. It reads the site,
-your ads, your leads and your mailbox, and turns what it finds into a short list of actions:
-a site fix it can deploy itself, a wasting campaign to pause, an email to send, a call to book,
-an invoice to raise. Nothing changes until you approve it. Afterwards it re-checks the world and
-writes the before → after next to the action. You pay nothing until it has measured a result
-you agreed with.
+RevenueOS is a revenue department for one business.
+
+1. **Connect once.** Give it your website; it fills in the rest and labels every guess.
+2. **Discover.** It reads the site, your ads, your leads and your mailbox and turns what it finds into a short list of actions.
+3. **Approve.** Nothing changes until you approve an action.
+4. **Execute.** It deploys the site fix, pauses the wasting campaign, sends the email, books the call, raises the invoice.
+5. **Measure.** It re-checks the world and records before → after next to the action.
+6. **Pay.** Nothing is charged until it has measured a result you agreed with.
 
 ```
 Connect once → Discover → Approve → Execute → Measure → (agree) → Pay
@@ -29,22 +31,35 @@ revenueos demo https://yoursite.com
 ```
 
 No account, nothing stored. It prints what is costing the site customers and which of those
-fixes RevenueOS deploys itself once connected. A real run:
+fixes RevenueOS deploys itself once connected. Run on the neutral example domain, exactly as
+printed:
 
 ```
-RevenueOS demo — Example Business® (https://example.com)
+RevenueOS demo — Example Domain (https://example.com)
 
-  5 pages crawled · ad/analytics tags: Meta Pixel, GA4 · booking link: yes · phones: +61 8 0000 0000, +61 8 0000 0000
+  1 pages crawled · ad/analytics tags: none · booking link: no · phones: none seen
 
-  1. PHONE NOT TAPPABLE — the number is plain text; a visitor on a phone cannot tap to call
+  1. MISSING DESCRIPTION — https://example.com
+     Page has no meta description.
      → RevenueOS writes the fix as a deliverable you approve, then re-checks the page.
-  2. NO LOCAL SCHEMA — Google cannot read the business type, address and hours
+  2. THIN PAGE — https://example.com
+     Only ~127 characters of body text were extracted.
+     → RevenueOS writes the fix as a deliverable you approve, then re-checks the page.
+  3. NO SITEMAP — https://example.com
+     No sitemap.xml was discovered at the host root or under the site path.
+     → RevenueOS writes the fix as a deliverable you approve, then re-checks the page.
+  4. NO CANONICAL — https://example.com
+     The homepage declares no canonical URL.
      → RevenueOS deploys this fix itself once the site is connected (git or WordPress), then re-checks it.
-  3. NO CANONICAL
-     → RevenueOS deploys this fix itself once the site is connected, then re-checks it.
 
-  3 finding(s). Everything above runs free, every day, once connected. You pay only when you agree with a measured result.
+  4 finding(s). Everything above runs free, every day, once connected:
+     pip install revenueos && revenueos init --from https://example.com && revenueos serve
+  You pay only when you agree with a measured result.
 ```
+
+On a real business the same command also reads the homepage for tappable phone numbers,
+LocalBusiness schema, booking links and ad tags (Meta Pixel, Google Ads, GA4), and the
+Watch-it-work view streams each check as it runs.
 
 ### Run the demo from GitHub, no install
 

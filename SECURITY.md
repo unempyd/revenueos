@@ -2,8 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please report suspected security issues by email to **security@revenueos.example**
-*(placeholder — replace with the project's real security contact before publishing)*.
+Please report suspected security issues to **revenueos@icloud.com**.
 Do not open a public issue for a suspected vulnerability.
 
 Include, if you can:
@@ -12,15 +11,13 @@ Include, if you can:
 - Steps to reproduce it, or a proof of concept.
 - The version or commit you tested against.
 
-We will acknowledge your report within 5 business days and aim to give you an initial
-assessment within 10 business days.
+We read that mailbox and will reply once we have looked at the report.
 
 ## Disclosure timeline
 
-We ask for 90 days from initial report before any public disclosure, to give us time to
-investigate, fix, and release a patch. We will keep you updated on progress throughout,
-and we're happy to credit reporters in the release notes for a fix unless you'd prefer to
-stay anonymous.
+We ask for 90 days from the initial report before any public disclosure, to give us time to
+investigate, fix and release a patch. We are happy to credit reporters in the release notes
+for a fix unless you would prefer to stay anonymous.
 
 ## Supported versions
 

@@ -10,7 +10,7 @@ from revenueos.workers import run_worker
 # Rows shaped like the September GitHub scrape: qualified_at stamped on rows with no email at all.
 SCRAPE_CSV = """email,first_name,last_name,company,title,website,linkedin_url,reason,lead_id,qualified_at
 ,Jeremy,Carmona,Clear Concise Consulting,Founder,,https://github.com/ccc,forked a repo,gh:ccc,2026-09-12
-acmeai@acme-studio.com,La,Acme,{acmeAI},agency,https://www.acme-studio.com/,https://github.com/lc,forked a repo,gh:lc,2026-09-12
+studio@acme-studio.example,Ana,Ruiz,{acmeAI},agency,https://www.acme-studio.example/,https://github.com/lc,forked a repo,gh:lc,2026-09-12
 dasha.example@gmail.com,Dasha,Z,northwind-labs,,https://northwind-labs.example/,https://github.com/dk,forked a repo,gh:dk,2026-09-12
 ,Wu,Shuwen,Tiktok,intern,,https://github.com/ws,forked a repo,gh:ws,2026-09-12
 ,Zack,Zang,sugarcrm @IBM @Citigroup @GE,,,https://github.com/zz,forked a repo,gh:zz,2026-09-12
@@ -75,7 +75,7 @@ def test_no_lead_without_a_contact_email_is_ever_counted_as_qualified(workspace,
         if not (lead.get("contact_email") or "").strip():
             assert lead["status"] == "new", lead["business_name"]
     assert {a["title"] for a in store.list_actions("pending", "prospect")} == {
-        "Qualified prospect: La Acme at acmeAI", "Qualified prospect: Ana Plum at PlumAngola", "Qualified prospect: Tassos S at Tassos.gr"}
+        "Qualified prospect: Ana Ruiz at acmeAI", "Qualified prospect: Ana Plum at PlumAngola", "Qualified prospect: Tassos S at Tassos.gr"}
     brief = build_brief(store)
     text = brief.render_text("Acme")
     assert "leads: 10 found · 5 contactable · 3 qualified" in text and "3 qualified prospects found" in text
@@ -111,7 +111,7 @@ def test_staging_never_writes_qualified_at(tmp_path):
 
     src = tmp_path / "forks.csv"
     src.write_text("login,name,company,email,blog,location,bio,twitter_username,public_repos,followers,created_at,html_url\n"
-                   "acme-studio,Acme Studio,{acmeAI},acmeai@acme-studio.com,https://www.acme-studio.com/,,agency,,130,5,2020,https://github.com/acme-studio\n"
+                   "acme-studio,Ana Ruiz,{acmeAI},studio@acme-studio.example,https://www.acme-studio.example/,,agency,,130,5,2020,https://github.com/acme-studio\n"
                    "ccc,Jeremy Carmona,Clear Concise Consulting,,,,founder,,12,2,2021,https://github.com/ccc\n")
     out = subprocess.run([sys.executable, "scripts/stage_leads.py", str(src), "--signal", "forked marketingskills"],
                          capture_output=True, text=True, check=True, cwd=str(__import__("pathlib").Path(__file__).resolve().parents[1]))

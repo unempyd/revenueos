@@ -8,11 +8,11 @@ from revenueos.billing import pay_on_result
 from revenueos.cli import main
 
 HOME = """<html lang="en"><head><title>Best Hair Salon in Adelaide | Glow Salon</title>
-<meta name="description" content="Glow Salon, Adelaide's balayage and extensions specialists in Example Suburb."><meta property="og:site_name" content="Glow Salon">
+<meta name="description" content="Glow Salon, the city's balayage and extensions specialists."><meta property="og:site_name" content="Glow Salon">
 <script>fbq('init','700642230440253');</script></head>
 <body><h1>Adelaide Hair Experts | Blonde &amp; Extensions</h1><a href="/booking">Book online</a><a href="/about">About</a>
-<p>Call +61 8 0000 0000</p><a href="https://instagram.com/glow">Instagram</a><a href="mailto:hello@glow.example">email</a></body></html>"""
-ABOUT = "<html><head><title>About</title></head><body><h2>Our team</h2><p>Two salons, Example Suburb and North Adelaide, since 2012.</p></body></html>"
+<p>Call +61 8 5550 0100</p><a href="https://instagram.com/glow">Instagram</a><a href="mailto:hello@glow.example">email</a></body></html>"""
+ABOUT = "<html><head><title>About</title></head><body><h2>Our team</h2><p>Two salons, north and south of the river, since 2012.</p></body></html>"
 
 
 def _client():
@@ -27,7 +27,7 @@ def _client():
 
 def test_read_site_and_heuristic_answers():
     facts = onboard.read_site("https://glow.example", client=_client())
-    assert facts["ok"] and facts["site_name"] == "Glow Salon" and facts["phones"] == ["+61 8 0000 0000"] and facts["booking_url"] == "/booking"
+    assert facts["ok"] and facts["site_name"] == "Glow Salon" and facts["phones"] == ["+61 8 5550 0100"] and facts["booking_url"] == "/booking"
     assert "https://glow.example/about" in facts["pages"] and "Two salons" in facts["pages"]["https://glow.example/about"]
     a = onboard.heuristic_answers(facts)
     assert a["company_name"] == "Glow Salon" and a["website"].startswith("https://glow.example")

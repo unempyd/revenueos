@@ -18,11 +18,11 @@ def test_strip_solicitations_removes_the_line_and_nothing_else():
 
 def test_deliverable_lint_drops_foreign_identity_lines():
     text = (f"# Triage\n**Prepared for:** operator@me.example\n{TIP}\n"
-            "Contact the salon at hello@example.example or the booking line.\n"
-            "Send the file to someone@gmail.example when done.\nUse tel:+6180000 0000 links.\n")
-    out, notes = deliverable_lint(text, allowed_emails=set(), allowed_domains={"example.example"})
+            "Contact the salon at hello@salon.example or the booking line.\n"
+            "Send the file to someone@gmail.example when done.\nUse tel:+61855500100 links.\n")
+    out, notes = deliverable_lint(text, allowed_emails=set(), allowed_domains={"salon.example"})
     assert "Prepared for" not in out and TIP not in out and "someone@gmail.example" not in out
-    assert "hello@example.example" in out and "tel:+6180000 0000" in out
+    assert "hello@salon.example" in out and "tel:+61855500100" in out
     assert any("solicitation" in n for n in notes) and any("someone@gmail.example" in n for n in notes)
 
 

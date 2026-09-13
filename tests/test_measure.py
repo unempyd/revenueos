@@ -164,13 +164,13 @@ def test_homepage_signals_parse_real_markup():
     html = ('<html><head><title>Salon</title><link rel="canonical" href="https://s.example/">'
             '<script>fbq("init", "700642230440253");</script><script src="https://www.googletagmanager.com/gtag/js?id=G-RKDVYP966W"></script>'
             '<script type="application/ld+json">{"@type": "HairSalon"}</script></head>'
-            '<body>Call +61 8 0000 0000 <a href="/booking">Book</a></body></html>')
+            '<body>Call +61 8 5550 0100 <a href="/booking">Book</a></body></html>')
     sig = seo.parse_signals(html, "https://s.example/")
     assert sig["ok"] and sig["phone_text"] and not sig["tel_link"] and sig["booking_link"] and sig["meta_pixel"] and sig["ga4"]
-    assert sig["phones"] == ["+61 8 0000 0000"] and sig["booking_url"] == "/booking" and sig["emails"] == []
+    assert sig["phones"] == ["+61 8 5550 0100"] and sig["booking_url"] == "/booking" and sig["emails"] == []
     finding = seo.signal_findings("https://s.example", {**sig, "local_schema": False})[0]
-    assert "phone numbers shown on the page: +61 8 0000 0000" in finding["why"] and "booking link: /booking" in finding["why"]
+    assert "phone numbers shown on the page: +61 8 5550 0100" in finding["why"] and "booking link: /booking" in finding["why"]
     assert sig["local_schema"] and sig["canonical"] and not sig["google_ads_tag"]
     assert [f["kind"] for f in seo.signal_findings("https://s.example", sig)] == ["phone_not_tappable"]
-    bare = seo.parse_signals("<html><body>Call 08 0000 0000</body></html>", "https://b.example/")
+    bare = seo.parse_signals("<html><body>Call 08 5550 0100</body></html>", "https://b.example/")
     assert [f["kind"] for f in seo.signal_findings("https://b.example", bare)] == ["phone_not_tappable", "no_local_schema", "no_canonical"]

@@ -201,6 +201,14 @@ def test_content_matches_channels_to_skills(workspace, store, onboarded):
     assert "ANTHROPIC_API_KEY" in execute_action(workspace, store, onboarded, None, acts[0])
 
 
+def test_content_never_prints_a_template_placeholder_as_the_category(workspace, onboarded):
+    from revenueos.workers.content import customer_facing
+
+    onboarded.manifest["category"] = "Replace with your category"
+    title, content = customer_facing({"name": "x", "description": "Write a landing page.", "what": "a conversion review"}, "website", onboarded)
+    assert "Replace" not in content and "Acme Scheduling" in content
+
+
 def test_content_curated_map_points_at_real_skills(workspace):
     from revenueos.registry import load_registry
     from revenueos.workers.content import CHANNEL_SKILLS, opportunities_for
@@ -257,7 +265,7 @@ def test_content_deliverable_sentence_strips_model_instructions():
 
 def test_outreach_observation_needs_a_defect_and_names_the_spend():
     lead = {"business_name": "Glow", "website_url": "https://www.glow.example/", "reason":
-            "hairdresser in Example Suburb (OpenStreetMap); ad/analytics tags on the site: Meta Pixel, GA4; online booking link; business email published on the site: hello@glow.example; phone shown but not tappable; no LocalBusiness schema"}
+            "hairdresser in Northtown (OpenStreetMap); ad/analytics tags on the site: Meta Pixel, GA4; online booking link; business email published on the site: hello@glow.example; phone shown but not tappable; no LocalBusiness schema"}
     kind, text = outreach.observation(lead)
     assert kind == "phone" and text.startswith("glow.example is set up for Meta ads (there is a Meta Pixel on it), so you are paying") and "GA4" not in text
     ads_only = {**lead, "reason": "cafe in Adelaide (OpenStreetMap); ad/analytics tags on the site: Meta Pixel; business email published on the site: a@b.example"}

@@ -128,14 +128,14 @@ def test_watch_it_work_details_the_site_audit(server, workspace, store, monkeypa
     monkeypatch.setattr(seo, "authority_gap", lambda *a, **k: None)
     monkeypatch.setattr(seo, "homepage_signals", lambda site, timeout=15.0: {"ok": True, "url": "https://acme-scheduling.example/", "meta_pixel": True, "google_ads_tag": False,
                                                                              "ga4": True, "booking_link": True, "tel_link": False, "phone_text": True, "local_schema": False, "canonical": True,
-                                                                             "phones": ["+61 8 0000 0000"], "emails": [], "booking_url": "/book"})
+                                                                             "phones": ["+61 8 5550 0100"], "emails": [], "booking_url": "/book"})
     srv, ctx = server
     cookie = "rs=" + make_token()
     _req(srv, "POST", "/onboard", urlencode(ANSWERS), cookie=cookie)  # the seo worker needs a website to read
     _s, _h, body = _req(srv, "GET", "/events/run?workers=seo", cookie=cookie)
     events = [json.loads(ln[6:]) for ln in body.splitlines() if ln.startswith("data: ")]
     detail = next(e for e in events if e["state"] == "detail")
-    assert len(detail["pages"]) == 2 and detail["signals"]["meta_pixel"] and detail["phones"] == ["+61 8 0000 0000"]
+    assert len(detail["pages"]) == 2 and detail["signals"]["meta_pixel"] and detail["phones"] == ["+61 8 5550 0100"]
     assert {f["kind"] for f in detail["findings"]} == {"phone_not_tappable", "no_local_schema"}
     assert "sitemap present" in detail["passed"] and "canonical declared" in detail["passed"] and "online booking link present" in detail["passed"]
     _s, _h, today = _req(srv, "GET", "/", cookie=cookie)

@@ -6,7 +6,7 @@ from revenueos.workers import discover, run_worker, sources
 
 def test_osm_source_stages_only_sites_with_ad_tags_and_a_business_email(monkeypatch):
     monkeypatch.setattr(sources, "fetch_osm", lambda bbox, kinds=None, limit=600, timeout=150.0: [
-        {"osm_id": "n1", "name": "Glow Salon", "website": "https://glow.example", "email": "", "phone": "", "kind": "hairdresser", "suburb": "Example Suburb"},
+        {"osm_id": "n1", "name": "Glow Salon", "website": "https://glow.example", "email": "", "phone": "", "kind": "hairdresser", "suburb": "Northtown"},
         {"osm_id": "n2", "name": "Quiet Cafe", "website": "https://quiet.example", "email": "", "phone": "", "kind": "cafe", "suburb": "Norwood"},
         {"osm_id": "n3", "name": "Dead Site", "website": "https://dead.example", "email": "", "phone": "", "kind": "dentist", "suburb": ""},
         {"osm_id": "n4", "name": "Gmail Only", "website": "https://gm.example", "email": "owner@gmail.com", "phone": "", "kind": "florist", "suburb": ""},
@@ -29,7 +29,7 @@ def test_osm_source_stages_only_sites_with_ad_tags_and_a_business_email(monkeypa
     assert [r["company"] for r in rows] == ["Glow Salon"]
     r = rows[0]
     assert r["email"] == "hello@glow.example" and r["lead_id"] == "osm:n1"
-    assert r["reason"] == ("hairdresser in Example Suburb (OpenStreetMap); ad/analytics tags on the site: Meta Pixel, GA4; online booking link; "
+    assert r["reason"] == ("hairdresser in Northtown (OpenStreetMap); ad/analytics tags on the site: Meta Pixel, GA4; online booking link; "
                            "business email published on the site: hello@glow.example; phone shown but not tappable; no LocalBusiness schema")
 
 
@@ -37,7 +37,7 @@ def test_discover_runs_the_osm_source_from_config(workspace, store, onboarded, m
     onboarded.config["discover"] = {"osm": {"bbox": [-35.05, 138.45, -34.75, 138.75], "area": "Adelaide"}}
     monkeypatch.setattr(sources, "osm_leads", lambda cfg: ([{
         "email": "hello@glow.example", "first_name": "", "last_name": "", "company": "Glow Salon", "title": "",
-        "website": "https://glow.example/", "linkedin_url": "", "reason": "hairdresser in Example Suburb (OpenStreetMap); ad/analytics tags on the site: Meta Pixel",
+        "website": "https://glow.example/", "linkedin_url": "", "reason": "hairdresser in Northtown (OpenStreetMap); ad/analytics tags on the site: Meta Pixel",
         "lead_id": "osm:n1", "_source": "osm", "_signals": {"meta_pixel": True}}], {"candidates": 1, "reachable": 1, "with_ad_tag": 1, "with_email": 1, "staged": 1}))
     r = run_worker("discover", workspace, store, onboarded, None)
     assert r.ok and r.actions_created == 1 and r.details["osm"]["staged"] == 1, r
