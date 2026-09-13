@@ -1,40 +1,58 @@
-<p align="center"><strong>RevenueOS</strong></p>
-<h1 align="center">Connect once. Everything runs free. Pay when you agree with the result.</h1>
+<p align="center">
+  <img src="assets/banner.svg" alt="RevenueOS — connect once, everything runs free, pay when you agree with the result" width="100%">
+</p>
+
+<h1 align="center">RevenueOS</h1>
+
+<p align="center">
+A revenue department for one business. It reads your website, ads, leads and mailbox,
+turns what it finds into a short list of actions, does the ones you approve, and measures
+what changed.
+</p>
+
+<p align="center"><strong>Connect once. Everything runs free. Pay when you agree with the result.</strong></p>
+
+<p align="center">
+<a href="https://pypi.org/project/revenueos/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/revenueos"></a>
+<a href="https://github.com/unempyd/revenueos/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/unempyd/revenueos/ci.yml?branch=main&label=ci"></a>
+<a href="LICENSE"><img alt="Licence MIT" src="https://img.shields.io/pypi/l/revenueos"></a>
+<img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-blue">
+</p>
 
 <p align="center">
 <a href="docs/proof.md">Runtime proof</a> ·
 <a href="docs/architecture.md">Architecture</a> ·
-<a href="docs/security-and-approval.md">Security &amp; approval model</a> ·
+<a href="docs/security-and-approval.md">Security &amp; approval</a> ·
 <a href="docs/integrations.md">Integrations</a> ·
 <a href="docs/community-vs-hosted.md">Community vs Hosted</a> ·
 <a href="capabilities/README.md">Capabilities</a>
 </p>
 
-RevenueOS is a revenue department for one business.
+---
 
-1. **Connect once.** Give it your website; it fills in the rest and labels every guess.
-2. **Discover.** It reads the site, your ads, your leads and your mailbox and turns what it finds into a short list of actions.
+## What it does
+
+1. **Connect once.** Give it your website. It fills in the rest and labels every guess.
+2. **Discover.** It reads the site, the ad exports or ad accounts, the lead lists and the mailbox, and writes what it finds as actions.
 3. **Approve.** Nothing changes until you approve an action.
-4. **Execute.** It deploys the site fix, pauses the wasting campaign, sends the email, books the call, raises the invoice.
-5. **Measure.** It re-checks the world and records before → after next to the action.
+4. **Execute.** It deploys the site fix, pauses the wasting campaign, sends the email, books the call, raises the invoice, publishes the post.
+5. **Measure.** It re-reads the live account and records before → after next to the action.
 6. **Pay.** Nothing is charged until it has measured a result you agreed with.
 
-```
-Connect once → Discover → Approve → Execute → Measure → (agree) → Pay
-```
+<p align="center">
+  <img src="assets/loop.svg" alt="The loop: connect once, discover, you approve, execute, measure, you agree, pay — with measured results ranking what comes next" width="100%">
+</p>
 
 ## Try it on your site in one command
 
 ```bash
-pip install revenueos
-revenueos demo https://yoursite.com
+uvx revenueos demo https://yoursite.com     # nothing to install; or: pip install revenueos && revenueos demo …
 ```
 
 No account, and nothing is kept: the demo builds a workspace in a temporary directory and
-deletes it before it exits. (If a model is configured, the pages it reads are sent to that
-provider; `--no-llm` keeps it entirely local.) It prints what is costing the site customers and
-which of those fixes RevenueOS deploys itself once connected. Run on the neutral example domain, exactly as
-printed:
+deletes it before it exits. It is not offline, though. The pages it reads go to whichever
+model you have configured, and only `--no-llm` keeps the run entirely local. Here is the
+whole output on a neutral domain, verbatim:
 
 ```
 RevenueOS demo — Example Domain (https://example.com)
@@ -60,12 +78,9 @@ RevenueOS demo — Example Domain (https://example.com)
 ```
 
 On a real business the same command also reads the homepage for tappable phone numbers,
-LocalBusiness schema, booking links and ad tags (Meta Pixel, Google Ads, GA4), and the
-Watch-it-work view streams each check as it runs.
+LocalBusiness schema, booking links and ad tags (Meta Pixel, Google Ads, GA4).
 
-### Run the demo from GitHub, no install
-
-Add one step to any workflow and read the job summary:
+To run it from CI instead, add one step and read the job summary:
 
 ```yaml
 - uses: unempyd/revenueos@main
@@ -80,50 +95,138 @@ revenueos init --from https://yoursite.com   # the site fills the questionnaire;
 revenueos serve                              # TODAY / RESULTS / Connections / Spend on http://127.0.0.1:8791
 ```
 
-Connections are accounts you authorise once — Stripe, Google (Search Console, GA4, Calendar, Ads),
-Meta Ads, a git-hosted site, WordPress — read-only until you flip **allow changes**. Every change
-still waits for your approval on TODAY. Details and the runtime proofs: [docs/integrations.md](docs/integrations.md).
+A **connection** is an account you authorise once: Stripe, Google (Search Console, GA4,
+Calendar, Ads), Meta Ads, a git-hosted site, WordPress. Every connection is read-only until
+you turn on **allow changes** for it, and every change still waits for your approval on
+TODAY. See [docs/integrations.md](docs/integrations.md).
 
-## Pay when you agree with the result
+## How it works
 
-Everything runs free: every worker, the panel, the executors. When RevenueOS has measured a result
-on an action you approved, it keeps running free for 14 more days, then continuous operation asks
-for Pro ($99/month). One-shot runs and the panel never lock. There is no trial clock that starts
-before you have seen a result.
+<p align="center">
+  <img src="assets/architecture.svg" alt="Accounts you connect once feed workers that only read; workers write actions to the store; the CLI, control panel and MCP present them; your approval is the only door to the executors, the only things that write back to your accounts, and measure re-reads the live account" width="100%">
+</p>
+
+Four rules hold that picture together, each enforced in code and covered by tests:
+
+- Workers never send, publish or spend. They only write actions.
+- Only an approved action reaches an executor, and an executor that changes a connected
+  account also needs that connection's **allow changes** switch. It refuses in a plain
+  sentence otherwise.
+- An outcome is `pending` until there is evidence, `measured` or `no_effect` from evidence,
+  and `unmeasurable` with a note saying what would measure it. No metric is ever synthesised.
+- A deliverable that was produced but not published is reported as `produced`, never as a win.
+
+The longer version is in [docs/architecture.md](docs/architecture.md).
 
 ## What the customer sees
 
-<p align="center"><img src="docs/screenshots/today.png" alt="RevenueOS TODAY: the opportunities found for the connected business, each with Approve / Execute / Ignore" width="820"></p>
+<p align="center"><img src="website/screenshots/today-current.png" alt="RevenueOS TODAY: opportunities found for the connected business, each with Approve, Execute and Ignore" width="820"></p>
 
-<p align="center"><img src="docs/screenshots/results.png" alt="RevenueOS RESULTS: what was executed and the measured outcome" width="820"></p>
+<p align="center"><img src="website/screenshots/results-current.png" alt="RevenueOS RESULTS: what was executed and the measured outcome, deliverable_written 0 to 1" width="820"></p>
 
-Both screens come from a real run against a real business (see below); nothing in them is mocked.
+Both screens are from a live run against a real company's public web presence, read-only,
+with no email sent to anyone. Nothing in them is mocked.
 
-## Verified runtime proof
+## Workers
 
-On 2026-09-12 RevenueOS was connected to Plausible Analytics using only its public web
-presence (read-only; no email sent), then run end to end:
+| Worker | Discovers | Executes (after approval) | Measures |
+|---|---|---|---|
+| `seo` | crawl defects, authority gap, indexing surface | the matching SEO skill, or `site_deploy` when the site is connected | re-crawl: fixed or not |
+| `ads-audit` | waste, over-pacing and concentration in ad exports; search terms that spend, convert nothing and are not excluded; then the full control audit (414 controls across 12 platforms, 97 Google and 72 Meta) under the upstream runtime contract, pass or fail only with evidence | the matching ads skill | next export delta; the next search-term read; a failing control re-checked by the next audit |
+| `ads-live` | the same on connected Google Ads and Meta accounts, with keywords, quality scores, search terms and negative-keyword lists | `ads_pause`, `ads_budget` | next spend read |
+| `analytics` | Search Console queries losing clicks, GA4 channel results | the title and description skill | next Search Console read |
+| `billing` | Stripe revenue, MRR, customers, open invoices, paying subscriptions | `send_invoice` | Stripe paid status |
+| `discover` | prospects from lead lists or an external prospecting service, through the qualification gate (business email, business website, real company name; reported as found · contactable · qualified) | none | via outreach |
+| `outreach` | first-touch drafts from your business canon, re-verified against the live page before sending | sends, under a daily cap, a suppression list and an unsubscribe footer | replies, booked, pipeline value |
+| `inbox` | replies, bounces and STOP requests on your mailbox | none | feeds outreach outcomes |
+| `content` | content work matched to your channels | the deliverable, then `publish_post` to WordPress after a second approval | published 0 → 1 on the live URL |
+| `monitor` | Hacker News threads that pass a default-reject relevance gate | none | none |
+| `growth` | external adoption numbers for your own surfaces: GitHub traffic, PyPI downloads, site reachability | none | recorded as metrics with a delta |
+| `heartbeat` | the state of your objective: what is pending, approved but not run, measured, failed or blocked | none | writes one dated event per run |
+| `measure` | none | none | records every outcome above |
 
-| Stage | What happened |
-|---|---|
-| Discover | 12 pages crawled, competitor authority checked, Hacker News searched with a strict relevance gate, 6 content opportunities queued |
-| Approve → Execute | one opportunity approved; Claude executed the RevenueOS SEO content-brief skill in 1 m 23 s and produced a 14 KB deliverable |
-| Measure | the outcome `deliverable_written 0 → 1` was recorded and shown in RESULTS |
+`revenueos orchestrator` runs the workers on a schedule (`data/automations.json`).
+`revenueos serve` is the same surface as a web panel, with password sessions, onboarding,
+the brief and the results ledger.
 
-The full transcript, including what it did **not** find and why, is in [docs/proof.md](docs/proof.md).
-RevenueOS reports opportunities found, actions executed, execution time and measured outcomes.
-It does not claim revenue it has not measured.
+## What is proven, and what is not
+
+That table says what the code does, which is not the same as what has been watched doing it.
+The evidence is uneven, and it is worth knowing which row you are relying on. Dates and
+transcripts: [docs/proof.md](docs/proof.md) and [docs/integrations.md](docs/integrations.md).
+
+| Path | Status | Evidence |
+|---|---|---|
+| Site fix deployed and measured | **run live** | `site_deploy` pushed two commits to the live site; the page carried both tags within 20 s; `canonical_present 0 → 1` and `local_schema_present 0 → 1` (2026-09-13) |
+| Content deliverable | **run live** | a real crawl of a real company, one opportunity approved, the skill executed, `deliverable_written 0 → 1` (2026-09-12) |
+| Stripe | **read live** | live account: 0 customers, MRR 0.00 AUD, revenue 30 days 0.00 AUD; an invoice draft created and deleted; the same call refused while allow changes was off |
+| Google Search Console | **read live** | property verified, then `revenueos run analytics` returned 0 clicks and 0 impressions over 28 days (2026-09-13) |
+| Mailbox | **run live** | `inbox` read a live IMAP mailbox; `book_call` sent a real calendar invite. No outreach email has been sent to anyone |
+| Hosted, multi-tenant | **run live** | two accounts on one host, each bound to its own workspace; 401 without a login or with a wrong password |
+| Google Ads and Meta Ads reads | **not proven live** | every request shape is exercised against mocked endpoints only. Two things gate a live Google Ads run, neither of them code: the `adwords` scope is not requested by default (`revenueos connect google --scopes identity,searchconsole.read,analytics.read,calendar.write,ads.read` asks for it), and a developer token is issued from the API Centre of a Google Ads **manager** account. `ads-live` refuses by naming the missing prerequisite instead of surfacing a 401. `ads-audit` on exported CSVs is a different and simpler path |
+| GA4 | **not read** | no GA4 property is configured on the site under test |
+
+**RevenueOS has 0 customers and $0 in revenue.** The rows above are the product doing work
+and recording it, not a business result anyone has paid for. Every number RevenueOS reports
+is something it observed. Where it cannot observe an effect, it says so instead of
+estimating one.
+
+## Approval, permissions and honesty
+
+Workers only look and propose. `execute` on an approved action is the single choke point,
+whether it was triggered from the CLI, the panel or MCP. The one path that can mail a
+stranger is bounded by a daily send cap, a persistent suppression list, a `List-Unsubscribe`
+header, reply-STOP handling and a CASL identification footer. `REVENUEOS_DRY_RUN=1` writes
+every send to `data/outputs/` instead of SMTP.
+
+Credentials split in two, and the difference matters:
+
+- **From the environment, never stored.** Model keys, the mailbox passwords
+  (`SMTP_PASSWORD`, `IMAP_PASSWORD`), the panel password, the worker token and the connector
+  keys are read from the process environment and are never written into the workspace.
+- **Stored on disk, because they have to outlive the process.** A connection's secrets are
+  written to `data/connections.json` at mode 600: a Stripe secret key, Google and Meta OAuth
+  access and refresh tokens, a WordPress application password. They are encrypted at rest
+  only when you set `REVENUEOS_TOKEN_KEY`. Without that variable they are plaintext in that
+  file, readable by anything that can read it, including a backup or a sync client. Set it,
+  or accept that. What bounds the damage is the provider's scopes and the allow-changes
+  switch, which is off until you turn it on.
+
+The panel refuses to bind a non-loopback address without a password. There is no telemetry
+and no phone-home. Prompts carry a selected slice of your business canon plus the one item
+being worked on, never the whole canon or the database. See
+[docs/security-and-approval.md](docs/security-and-approval.md) and [SECURITY.md](SECURITY.md).
+
+## Pay when you agree with the result
+
+**Community** is free, MIT-licensed, and is the whole product: every worker, the control
+panel, the connections and executors, the capability catalogue (13 packs, 790 skills, 104
+agent definitions, 64 connector CLIs), the MCP server and the Claude Code plugin. It is not
+a trial, and no clock starts before you have seen a result.
+
+Everything runs free, including continuous operation, until RevenueOS has measured a result
+on an action you approved. Then it keeps running free for 14 more days. After that one thing
+asks for **Pro** ($99/month): `revenueos orchestrator` running continuously. One-shot runs,
+every worker and the panel never lock. A licence key is Ed25519-signed and verified offline;
+a missing, expired or unsigned key fails closed to Community.
+
+That licence check is the only thing the software gates. **Business and Agency** ($299 and
+$999 per month) are the arrangement under which we run and support RevenueOS for you, not a
+larger feature set: multi-brand workspaces, multiple users, CRM sync, centralised analytics,
+client fleets, white-label reports and an API do not exist, and nothing in this repository
+gates them. Ask before paying for those. Full breakdown:
+[docs/community-vs-hosted.md](docs/community-vs-hosted.md).
 
 ## Install
 
 ```bash
-pip install revenueos   # or: uv tool install revenueos
+pip install revenueos                        # or: uv tool install revenueos
 revenueos init --from https://yoursite.com   # or `revenueos init` for the questionnaire
-revenueos run all                    # every worker once
-revenueos today                      # the brief
+revenueos run all                            # every worker once
+revenueos today                              # the brief
 revenueos approve 1 && revenueos execute 1
 revenueos run measure && revenueos results
-revenueos serve                      # the same surface as a web panel on http://127.0.0.1:8791
+revenueos serve                              # the same surface as a web panel
 ```
 
 From source:
@@ -134,105 +237,65 @@ uv sync && (cd orchestrator && npm install)
 uv run revenueos init
 ```
 
-Requirements: Python 3.12+, Node 20+ (scheduler and connector CLIs). An LLM is used if
-present — `ANTHROPIC_API_KEY`, otherwise a signed-in Claude Code CLI. Without either, the
-deterministic half of the product still runs: the site crawl and its findings, the ad-export
-waste, pacing and concentration checks, search-term waste, lead qualification, inbox replies
-and bounces, templated outreach drafts, content matching, and all measurement. What does need
-a model, and says so rather than pretending: executing any action whose executor is
-`run_skill` (the SEO, content and ads deliverables), the 414-control ads audit, `monitor`'s
-relevance gate, and the specialist roles. Site deploys, campaign pauses, invoices, bookings
-and email sends need no model.
+Requirements: Python 3.12+, and Node 20+ for the scheduler and the connector CLIs.
 
-## Workers
-
-| Worker | Discovers | Executes (after approval) | Measures |
-|---|---|---|---|
-| `seo` | crawl defects, authority gap, indexing surface | the matching SEO skill | re-crawl: fixed or not |
-| `ads-audit` | wasted spend, over-pacing, concentration in ad exports; search terms that spend, convert nothing and are not excluded (drop Google's keyword and search-term downloads beside the export); then the full control audit: 97 Google / 72 Meta controls (414 across 12 platforms) evaluated under the upstream runtime contract, pass/fail only with evidence | the matching ads skill | next export delta; the next search-term read; a failing control re-checked by the next audit |
-| `ads-live` | the same on connected Google Ads / Meta accounts, with keywords, quality scores, search terms and negative-keyword lists read from Google Ads; wasting campaigns become pause / budget actions | `ads_pause`, `ads_budget` | next spend read |
-| `analytics` | Search Console queries losing clicks, GA4 channel results | the title/description skill | next Search Console read |
-| `billing` | Stripe revenue, MRR, customers, open invoices | `send_invoice` | Stripe paid status |
-| `discover` | prospects from lead lists or an external prospecting service, through the qualification gate (business email + website + real company; reported as found · contactable · qualified) | — | via outreach |
-| `outreach` | first-touch drafts from your canon | sends (daily cap, suppression list, unsubscribe footer) | replies, booked, pipeline value |
-| `inbox` | replies, bounces and STOP requests on your mailbox | — | feeds outreach outcomes |
-| `content` | content work matched to your channels | Claude produces the deliverable; publishes it to WordPress after a second approval | published 0 → 1 on the live URL |
-| `monitor` | Hacker News threads that pass a strict relevance gate | — | — |
-| `measure` | — | — | records every outcome above |
-
-`revenueos orchestrator` runs the workers on a schedule (`data/automations.json`);
-`revenueos serve` is the control panel with password sessions, onboarding, the brief and results.
+An LLM is used if one is present: `ANTHROPIC_API_KEY`, otherwise a signed-in Claude Code
+CLI. Without either, the deterministic half still runs: the site crawl and its findings, the
+ad-export waste, pacing and concentration checks, search-term waste, lead qualification,
+inbox replies and bounces, templated outreach drafts, content matching, and all measurement.
+Four things do need a model, and say so rather than pretending: executing any action whose
+executor runs a skill (the SEO, content and ads deliverables), the 414-control ads audit,
+the relevance gate in `monitor`, and the specialist roles. Site deploys, campaign pauses,
+invoices, bookings and email sends need no model.
 
 ## It keeps working between sessions
 
 RevenueOS holds an **objective** for the business (`revenueos objective add "…"`, the last
-onboarding question, or a `MANDATE.md` at the workspace root that the heartbeat reads and the orchestrator reports on `/health`) and a **heartbeat** worker, scheduled every 30 minutes, that reads the
-state of that objective: what is pending, what was approved and not yet run, what was measured,
-what failed and why, what is blocked and what would unblock it. It writes one dated event per run,
-sets the next action, and leaves a message for you only when a human is needed
-(`revenueos messages`, or the "Inbox from RevenueOS" block on TODAY). Nothing in it sends,
-publishes or spends.
+onboarding question, or a `MANDATE.md` at the workspace root). A **heartbeat** worker,
+scheduled every 30 minutes, reads the state of that objective: what is pending, what was
+approved and not run, what was measured, what failed and why, what is blocked and what would
+unblock it. It writes one dated event per run, sets the next action, and leaves a message
+for you only when a human is needed (`revenueos messages`, or the inbox block on TODAY).
+Nothing in it sends, publishes or spends.
 
-Specialised **roles** (`revenueos agent run research|marketing|sales|measurement "<task>"`) answer
-one question each with cited evidence, may spawn sub-tasks two levels deep, and can only
-*propose* actions, which land on TODAY like every other one. Every measured outcome becomes a
-dated **lesson** (`revenueos learn`, `learning-loop/LESSONS.md`) that is injected into the next
-prompts; role specs are refined by small evidence-backed edits with snapshots and rollback
-(`revenueos refine <role> …`). Any of this works without a model, except the roles, which then say
-so instead of answering.
-
-## Community and Hosted
-
-**RevenueOS Community** (free, MIT): everything — every worker, continuous operation, the control
-panel, connections and executors, the capability packs (13 packs, 790 skills, 104 agents, 64 connector
-CLIs), the MCP server and the Claude Code plugin — free until RevenueOS has measured a result you
-approved, then 14 more days.
-
-**RevenueOS Pro** ($99/month) keeps continuous operation on after that. A signed licence key,
-emailed after payment, unlocks it. That is the whole difference in the software today: the licence
-check gates one thing, `revenueos orchestrator` running continuously. **Business and Agency**
-($299 / $999 per month) are the arrangement under which we run and support RevenueOS for you;
-the multi-brand, multi-user and fleet features named on the pricing page are **not built yet**
-and nothing in this repository gates them. Ask before paying for those.
-Details: [docs/community-vs-hosted.md](docs/community-vs-hosted.md).
-
-## Security and approval
-
-Workers never send, publish or spend — they only write actions. Only an approved Execute acts,
-and it is bounded by a daily send cap, a suppression list, `List-Unsubscribe` and reply-STOP
-handling. Provider keys and mailbox passwords come from the environment and are never written
-to the workspace. The one exception is a **connection** you authorise: its tokens (a Stripe
-key, Google/Meta OAuth tokens, a WordPress application password) are stored in
-`data/connections.json` at mode 600, and are encrypted at rest only when you set
-`REVENUEOS_TOKEN_KEY` — without it they are readable by anything that can read the file. The
-panel refuses to bind a public address without a password. See [docs/security-and-approval.md](docs/security-and-approval.md) and
-[SECURITY.md](SECURITY.md).
+Specialist **roles** (`revenueos agent run research|marketing|sales|measurement "<task>"`)
+answer one question each with cited evidence, may spawn sub-tasks two levels deep, and can
+only propose actions, which land on TODAY like any other. Every measured outcome becomes a
+dated **lesson** (`revenueos learn`, `learning-loop/LESSONS.md`) that is injected into later
+prompts. All of this works without a model except the roles, which then say so instead of
+answering.
 
 ## Integrations
 
-Website crawl, Hacker News, ad-platform exports (CSV), lead-list CSVs, SMTP/IMAP mailboxes,
-64 connector CLIs (analytics, CRM, email, SEO, ads, enrichment) keyed by environment
-variables, and an optional external prospecting service. See [docs/integrations.md](docs/integrations.md).
+Website crawl, Hacker News, ad-platform exports (CSV), lead-list CSVs, SMTP and IMAP
+mailboxes, the connections listed above, 64 connector CLIs (analytics, CRM, email, SEO, ads,
+enrichment) keyed by environment variables, and an optional external prospecting service.
+See [docs/integrations.md](docs/integrations.md).
 
 ## Deployment
 
 `Dockerfile`, `docker-compose.yml` (orchestrator, panel, optional TLS proxy) and `deploy/`
 (runbook, Fly.io, Railway, smoke test). See [deploy/README.md](deploy/README.md).
 
-## Licence
-
-RevenueOS is MIT-licensed. It includes permissively licensed open-source components, listed
-with their licences in [NOTICE.md](NOTICE.md) and reproduced in `THIRD_PARTY_LICENSES/`.
-Provenance of every included file is recorded in `VENDOR.json`.
-
-<!-- mcp-name: io.github.unempyd/revenueos -->
-
 ## Develop
 
 ```bash
-uv sync --extra dev --extra mcp && uv run pytest -q
+uv sync --extra dev --extra mcp && uv run pytest -q     # runs green
 (cd orchestrator && npm test && npm run typecheck)
 uv run ruff check src tests
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+RevenueOS is an assembly, not a fresh codebase. Most capability is vendored from pinned
+upstream repositories, and the code in `src/revenueos/` is the glue: business context,
+store, orchestration, approval surface, measurement and billing. Do not edit anything under
+`src/revenueos/vendor/`, `skills/`, `agents/` or `tools/`; those are regenerated by
+`scripts/vendor.py`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Licence
+
+RevenueOS is MIT-licensed ([LICENSE](LICENSE)). It includes permissively licensed
+open-source components, listed with their licences in [NOTICE.md](NOTICE.md) and reproduced
+in `THIRD_PARTY_LICENSES/`. The provenance of every vendored file, down to the upstream
+commit, is recorded in [VENDOR.json](VENDOR.json).
+
+<!-- mcp-name: io.github.unempyd/revenueos -->

@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 940" width="1600" height="940" role="img" aria-labelledby="t d">
+<title id="t">How RevenueOS works: workers only read, and nothing reaches your accounts without your approval</title>
+<desc id="d">The accounts you connect once feed workers that only read. Workers write actions into the store, which the CLI, control panel and MCP present to you. Your approval is the single door into the part of the system that changes anything: the executors, and the measure step that re-reads the live account. The only edge that writes back into your accounts starts after that approval.</desc>
+<style>
+  text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .surface{fill:#fff}
+  .frame{fill:none;stroke:#d2d2d7;stroke-width:1}
+  .card{fill:#f5f5f7;stroke:#d2d2d7;stroke-width:1}
+  .eyebrow{fill:#cf5600;font-size:16px;font-weight:700;letter-spacing:1.5px}
+  .h{fill:#1d1d1f;font-size:24px;font-weight:600;letter-spacing:-.4px}
+  .i{fill:#1d1d1f;font-size:18px;font-weight:400;letter-spacing:-.1px}
+  .sub{fill:#6e6e73;font-size:16px;font-weight:400}
+  .mono{fill:#1d1d1f;font-size:16px;font-weight:400;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .dot{fill:#86868b}
+  .edge{fill:none;stroke:#86868b;stroke-width:1.8}
+  .head{fill:#86868b}
+  .elbl{fill:#6e6e73;font-size:16px;font-weight:500}
+  .wedge{fill:none;stroke:#0071e3;stroke-width:2.4}
+  .whead{fill:#0071e3}
+  .band{fill:#0071e3;fill-opacity:.055;stroke:#0071e3;stroke-opacity:.34;stroke-width:1}
+  .bandlbl{fill:#0071e3;font-size:16px;font-weight:700;letter-spacing:1.5px}
+  .gate{fill:#0071e3;fill-opacity:.10;stroke:#0071e3;stroke-width:2.2}
+  .gatetext{fill:#0071e3;font-size:23px;font-weight:600;letter-spacing:-.3px}
+  .wlbl{fill:#0071e3;font-size:19px;font-weight:600;letter-spacing:-.2px}
+  .okpill{fill:none;stroke:#1a7f37;stroke-width:1.4}
+  .ok{fill:#1a7f37;font-size:15px;font-weight:600}
+  @media (prefers-color-scheme:dark){
+    .surface{fill:#000}
+    .frame{stroke:#424245}
+    .card{fill:#1d1d1f;stroke:#424245}
+    .eyebrow{fill:#f56900}
+    .h,.i,.mono{fill:#f5f5f7}
+    .sub,.elbl{fill:#86868b}
+    .band{fill:#2997ff;fill-opacity:.09;stroke:#2997ff;stroke-opacity:.42}
+    .bandlbl,.gatetext,.wlbl{fill:#2997ff}
+    .gate{fill:#2997ff;fill-opacity:.13;stroke:#2997ff}
+    .wedge{stroke:#2997ff}
+    .whead{fill:#2997ff}
+    .okpill{stroke:#30d158}
+    .ok{fill:#30d158}
+  }
+</style>
+
+<rect class="surface" x="0" y="0" width="1600" height="940" rx="28"/>
+<rect class="frame" x=".5" y=".5" width="1599" height="939" rx="27.5"/>
+
+<text class="eyebrow" x="56" y="64">HOW IT WORKS</text>
+
+<!-- legend -->
+<path class="edge" d="M1120 45 H1146"/>
+<text class="elbl" x="1158" y="50">reads — changes nothing</text>
+<path class="wedge" d="M1120 71 H1146"/>
+<text class="elbl" x="1158" y="76">writes — only after you approve</text>
+
+<!-- ── the band: everything that can change anything ─────────────── -->
+<rect class="band" x="636" y="538" width="908" height="356" rx="28"/>
+<text class="bandlbl" x="676" y="578">AFTER YOUR APPROVAL</text>
+<text class="sub" x="960" y="578">— the only part of the system that changes anything</text>
+
+<!-- ── A · accounts ──────────────────────────────────────────────── -->
+<rect class="card" x="56" y="112" width="320" height="290" rx="28"/>
+<text class="h" x="88" y="156">Accounts you</text>
+<text class="h" x="88" y="184">connect once</text>
+<circle class="dot" cx="92" cy="218" r="3"/><text class="i" x="108" y="224">Website</text>
+<circle class="dot" cx="92" cy="244" r="3"/><text class="i" x="108" y="250">Site repo or WordPress</text>
+<circle class="dot" cx="92" cy="270" r="3"/><text class="i" x="108" y="276">Google: Search Console,</text>
+<text class="sub" x="108" y="298">GA4, Calendar, Ads</text>
+<circle class="dot" cx="92" cy="324" r="3"/><text class="i" x="108" y="330">Meta Ads</text>
+<circle class="dot" cx="92" cy="350" r="3"/><text class="i" x="108" y="356">Stripe</text>
+<circle class="dot" cx="92" cy="376" r="3"/><text class="i" x="108" y="382">Mailbox (SMTP, IMAP)</text>
+
+<!-- ── B · workers ───────────────────────────────────────────────── -->
+<rect class="card" x="416" y="112" width="420" height="290" rx="28"/>
+<text class="h" x="448" y="168">Workers</text>
+<rect class="okpill" x="626" y="145" width="156" height="30" rx="15"/>
+<text class="ok" x="704" y="165" text-anchor="middle">read, never act</text>
+<text class="mono" x="448" y="226">seo</text>
+<text class="mono" x="448" y="260">ads-audit</text>
+<text class="mono" x="448" y="294">ads-live</text>
+<text class="mono" x="448" y="328">analytics</text>
+<text class="mono" x="578" y="226">billing</text>
+<text class="mono" x="578" y="260">discover</text>
+<text class="mono" x="578" y="294">outreach</text>
+<text class="mono" x="578" y="328">inbox</text>
+<text class="mono" x="708" y="226">content</text>
+<text class="mono" x="708" y="260">monitor</text>
+<text class="mono" x="708" y="294">growth</text>
+<text class="mono" x="708" y="328">heartbeat</text>
+<text class="sub" x="448" y="372">They write actions. That is all they can do.</text>
+
+<!-- ── C · store ─────────────────────────────────────────────────── -->
+<rect class="card" x="876" y="112" width="300" height="290" rx="28"/>
+<text class="h" x="908" y="168">Store</text>
+<text class="i" x="908" y="226">actions</text>
+<text class="i" x="908" y="258">outcomes</text>
+<text class="i" x="908" y="290">objectives</text>
+<text class="i" x="908" y="322">lessons</text>
+<text class="sub" x="908" y="372">SQLite, on your machine</text>
+
+<!-- ── D · surfaces ──────────────────────────────────────────────── -->
+<rect class="card" x="1216" y="112" width="328" height="290" rx="28"/>
+<text class="h" x="1248" y="168">Surfaces</text>
+<text class="i" x="1248" y="226">CLI</text>
+<text class="i" x="1248" y="258">Control panel</text>
+<text class="i" x="1248" y="290">MCP server</text>
+<text class="sub" x="1248" y="372">Where you see it and decide</text>
+
+<!-- read edges -->
+<path class="edge" d="M376 257 H400"/><path class="head" d="M400 250 l16 7 -16 7 z"/>
+<path class="edge" d="M836 257 H860"/><path class="head" d="M860 250 l16 7 -16 7 z"/>
+<path class="edge" d="M1176 257 H1200"/><path class="head" d="M1200 250 l16 7 -16 7 z"/>
+<path class="edge" d="M1380 402 V432"/><path class="head" d="M1373 432 l7 16 7 -16 z"/>
+
+<!-- ── gate ──────────────────────────────────────────────────────── -->
+<rect class="gate" x="1256" y="448" width="248" height="60" rx="30"/>
+<text class="gatetext" x="1380" y="486" text-anchor="middle">Your approval</text>
+
+<path class="wedge" d="M1380 508 V592"/><path class="whead" d="M1373 592 l7 16 7 -16 z"/>
+
+<!-- ignored -->
+<path class="edge" d="M1256 478 H1148 Q1132 478 1132 462 V418"/><path class="head" d="M1125 418 l7 -16 7 16 z"/>
+<text class="elbl" x="1226" y="462" text-anchor="end">ignored</text>
+
+<!-- ── E · executors ─────────────────────────────────────────────── -->
+<rect class="card" x="1104" y="608" width="400" height="254" rx="28"/>
+<text class="h" x="1136" y="660">Executors</text>
+<circle class="dot" cx="1140" cy="698" r="3"/><text class="i" x="1156" y="704">deploy site fix</text>
+<circle class="dot" cx="1140" cy="726" r="3"/><text class="i" x="1156" y="732">pause campaign</text>
+<circle class="dot" cx="1140" cy="754" r="3"/><text class="i" x="1156" y="760">change budget</text>
+<circle class="dot" cx="1140" cy="782" r="3"/><text class="i" x="1156" y="788">send email</text>
+<circle class="dot" cx="1328" cy="698" r="3"/><text class="i" x="1344" y="704">book call</text>
+<circle class="dot" cx="1328" cy="726" r="3"/><text class="i" x="1344" y="732">send invoice</text>
+<circle class="dot" cx="1328" cy="754" r="3"/><text class="i" x="1344" y="760">publish post</text>
+<text class="sub" x="1136" y="814">Each one also needs that connection's</text>
+<text class="sub" x="1136" y="836">allow-changes switch to be on.</text>
+
+<!-- ── F · measure ───────────────────────────────────────────────── -->
+<rect class="card" x="676" y="608" width="328" height="254" rx="28"/>
+<text class="h" x="708" y="660">Measure</text>
+<text class="i" x="708" y="706">re-reads the live account</text>
+<text class="i" x="708" y="734">and records before → after</text>
+<text class="i" x="708" y="762">next to the action</text>
+<text class="sub" x="708" y="826">pending until there is evidence</text>
+
+<path class="edge" d="M1104 740 H1036"/><path class="head" d="M1036 733 l-16 7 16 7 z"/>
+<text class="elbl" x="1054" y="726" text-anchor="middle">executed</text>
+
+<path class="edge" d="M940 608 V418"/><path class="head" d="M933 418 l7 -16 7 16 z"/>
+<text class="elbl" x="956" y="500">before and after</text>
+
+<!-- ── the one write path back into the accounts ─────────────────── -->
+<path class="wedge" d="M1304 862 V896 Q1304 912 1288 912 H240 Q224 912 224 896 V418"/>
+<path class="whead" d="M217 418 l7 -16 7 16 z"/>
+<text class="wlbl" x="256" y="700">The only writes</text>
+<text class="sub" x="256" y="728">into the accounts you connected</text>
+</svg>

@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 340" width="1600" height="340" role="img" aria-labelledby="t d">
+<title id="t">The RevenueOS loop: connect once, discover, you approve, execute, measure, you agree, pay</title>
+<desc id="d">Seven steps in a row — connect once, discover, you approve, execute, measure, you agree, pay — with a feedback edge from measure back to discover, because measured results rank what comes next. The two steps that are yours, approving and agreeing, are marked in blue.</desc>
+<style>
+  text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .surface{fill:#fff}
+  .frame{fill:none;stroke:#d2d2d7;stroke-width:1}
+  .eyebrow{fill:#cf5600;font-size:16px;font-weight:700;letter-spacing:1.5px}
+  .pill{fill:#f5f5f7;stroke:#d2d2d7;stroke-width:1}
+  .pill.you{fill:#0071e3;fill-opacity:.10;stroke:#0071e3;stroke-width:2}
+  .s{fill:#1d1d1f;font-size:21px;font-weight:500;letter-spacing:-.3px}
+  .s.you{fill:#0071e3;font-weight:600}
+  .edge{fill:none;stroke:#86868b;stroke-width:1.8}
+  .head{fill:#86868b}
+  .back{fill:none;stroke:#86868b;stroke-width:1.8;stroke-dasharray:6 6}
+  .elbl{fill:#6e6e73;font-size:17px;font-weight:400}
+  @media (prefers-color-scheme:dark){
+    .surface{fill:#000}
+    .frame{stroke:#424245}
+    .eyebrow{fill:#f56900}
+    .pill{fill:#1d1d1f;stroke:#424245}
+    .pill.you{fill:#2997ff;fill-opacity:.13;stroke:#2997ff}
+    .s{fill:#f5f5f7}
+    .s.you{fill:#2997ff}
+    .edge,.back{stroke:#86868b}
+    .head{fill:#86868b}
+    .elbl{fill:#86868b}
+  }
+</style>
+
+<rect class="surface" x="0" y="0" width="1600" height="340" rx="28"/>
+<rect class="frame" x=".5" y=".5" width="1599" height="339" rx="27.5"/>
+
+<text class="eyebrow" x="56" y="64">THE LOOP</text>
+
+<g>
+  <rect class="pill" x="56" y="104" width="180" height="68" rx="34"/>
+  <text class="s" x="146" y="146" text-anchor="middle">Connect once</text>
+
+  <rect class="pill" x="274" y="104" width="180" height="68" rx="34"/>
+  <text class="s" x="364" y="146" text-anchor="middle">Discover</text>
+
+  <rect class="pill you" x="492" y="104" width="180" height="68" rx="34"/>
+  <text class="s you" x="582" y="146" text-anchor="middle">You approve</text>
+
+  <rect class="pill" x="710" y="104" width="180" height="68" rx="34"/>
+  <text class="s" x="800" y="146" text-anchor="middle">Execute</text>
+
+  <rect class="pill" x="928" y="104" width="180" height="68" rx="34"/>
+  <text class="s" x="1018" y="146" text-anchor="middle">Measure</text>
+
+  <rect class="pill you" x="1146" y="104" width="180" height="68" rx="34"/>
+  <text class="s you" x="1236" y="146" text-anchor="middle">You agree</text>
+
+  <rect class="pill" x="1364" y="104" width="180" height="68" rx="34"/>
+  <text class="s" x="1454" y="146" text-anchor="middle">Pay</text>
+</g>
+
+<g>
+  <path class="edge" d="M244 138 H258"/><path class="head" d="M258 131 l16 7 -16 7 z"/>
+  <path class="edge" d="M462 138 H476"/><path class="head" d="M476 131 l16 7 -16 7 z"/>
+  <path class="edge" d="M680 138 H694"/><path class="head" d="M694 131 l16 7 -16 7 z"/>
+  <path class="edge" d="M898 138 H912"/><path class="head" d="M912 131 l16 7 -16 7 z"/>
+  <path class="edge" d="M1116 138 H1130"/><path class="head" d="M1130 131 l16 7 -16 7 z"/>
+  <path class="edge" d="M1334 138 H1348"/><path class="head" d="M1348 131 l16 7 -16 7 z"/>
+</g>
+
+<path class="back" d="M1018 172 V224 Q1018 240 1002 240 H380 Q364 240 364 224 V188"/>
+<path class="head" d="M357 188 l7 -16 7 16 z"/>
+<text class="elbl" x="691" y="284" text-anchor="middle">Measured results rank what comes next.</text>
+</svg>
