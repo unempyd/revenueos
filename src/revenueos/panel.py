@@ -241,6 +241,15 @@ LIVE = """<div class="stepper" id="stepper">{steps}</div>
     var e = JSON.parse(ev.data);
     if (e.state === "running") {{ rows[e.worker] = line("▸ " + e.label + " — running"); mark(e.step, "on"); }}
     else if (e.state === "done") {{ var r = rows[e.worker] || line(""); r.textContent = (e.ok ? "✓ " : "✗ ") + e.label + " — " + e.summary + (e.actions ? "  (+" + e.actions + " new)" : ""); mark(e.step, e.ok ? "ok" : "bad"); }}
+    else if (e.state === "detail") {{
+      var sig = e.signals || {{}};
+      var names = {{meta_pixel: "Meta Pixel", google_ads_tag: "Google Ads tag", ga4: "GA4", booking_link: "Booking link", tel_link: "Tappable phone", local_schema: "LocalBusiness schema", canonical: "Canonical"}};
+      line("   pages crawled: " + e.pages.length + (e.pages.length ? "  (" + e.pages.slice(0, 6).map(function(u){{ return u.replace(/^https?:\/\/(www\.)?/, ""); }}).join(", ") + (e.pages.length > 6 ? ", …" : "") + ")" : ""));
+      var seen = Object.keys(sig).filter(function(k){{ return sig[k]; }}).map(function(k){{ return names[k] || k; }});
+      line("   on the homepage: " + (seen.length ? seen.join(" · ") : "no ad tags, booking link, schema or canonical seen") + (e.phones.length ? " · phones: " + e.phones.join(", ") : ""));
+      (e.passed || []).forEach(function(t){{ line("   ✓ " + t); }});
+      (e.findings || []).forEach(function(f){{ line("   ✗ " + f.kind.replace(/_/g, " ") + " — " + f.url); }});
+    }}
     else if (e.state === "finished") {{ line(""); line("Done: " + e.new + " new opportunit" + (e.new === 1 ? "y" : "ies") + " waiting for your decision."); document.getElementById("done").hidden = false; es.close(); }}
   }};
   es.onerror = function(){{ es.close(); }};
@@ -483,7 +492,9 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             approved_html = (f"<h2>Approved, waiting to run ({len(b.approved)})</h2>"
                              "<p class='sub'>You said yes. Nothing happens until Execute; Execute sends the email or runs the skill and the result lands in RESULTS.</p>"
                              + approved_rows) if b.approved else ""
-            return (f'<div class="brief">{html.escape(chr(10).join(b.lines()))}</div>{run_form}<h2>Approve / Execute / Ignore</h2>'
+            return (f'<div class="brief">{html.escape(chr(10).join(b.lines()))}</div>{run_form}'
+                    "<p class='sub'>Read-only until you approve. Every line below is something observed about this business; nothing sends, publishes, changes a site or spends until you press Approve and then Execute.</p>"
+                    '<h2>Approve / Execute / Ignore</h2>'
                     + (rows or "<p>Nothing pending.</p>")
                     + "<p class='sub'>Approve = mark as wanted. Execute = do it now (send / run the skill). Ignore = drop it.</p>"
                     + approved_html)
@@ -538,6 +549,10 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                     new += r.actions_created
                     emit({"state": "done", "worker": n, "label": WORKER_LABEL.get(n, n), "step": WORKER_STEP.get(n, "analyse"), "ok": r.ok,
                           "summary": (r.summary or r.error or "")[:300], "actions": r.actions_created})
+                    if n == "seo" and r.details.get("urls") is not None:
+                        d = r.details
+                        emit({"state": "detail", "worker": n, "pages": d.get("urls", []), "signals": d.get("signals", {}), "phones": d.get("phones", []),
+                              "findings": d.get("findings", []), "passed": d.get("passed", [])})
                 emit({"state": "finished", "new": new})
             except (BrokenPipeError, ConnectionResetError):
                 return

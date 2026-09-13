@@ -114,6 +114,34 @@ def test_watch_it_work_streams_each_worker(server, workspace, store):
     assert events[0]["label"] == "Finding prospects" and events[2]["step"] == "measure"
 
 
+def test_watch_it_work_details_the_site_audit(server, workspace, store, monkeypatch):
+    import json as _j
+
+    from revenueos.workers import seo
+
+    async def fake_crawl(url, max_pages=10):
+        return _j.dumps({"ok": True, "sitemap_found": True, "pages": [
+            {"url": "https://acme-scheduling.example/", "meta": {"title": "Acme", "description": "d" * 40}, "excerpt": "x" * 400},
+            {"url": "https://acme-scheduling.example/pricing", "meta": {"title": "Pricing", "description": "d" * 40}, "excerpt": "x" * 400}]})
+
+    monkeypatch.setattr(seo, "crawl_website", fake_crawl)
+    monkeypatch.setattr(seo, "authority_gap", lambda *a, **k: None)
+    monkeypatch.setattr(seo, "homepage_signals", lambda site, timeout=15.0: {"ok": True, "url": "https://acme-scheduling.example/", "meta_pixel": True, "google_ads_tag": False,
+                                                                             "ga4": True, "booking_link": True, "tel_link": False, "phone_text": True, "local_schema": False, "canonical": True,
+                                                                             "phones": ["+61 8 0000 0000"], "emails": [], "booking_url": "/book"})
+    srv, ctx = server
+    cookie = "rs=" + make_token()
+    _req(srv, "POST", "/onboard", urlencode(ANSWERS), cookie=cookie)  # the seo worker needs a website to read
+    _s, _h, body = _req(srv, "GET", "/events/run?workers=seo", cookie=cookie)
+    events = [json.loads(ln[6:]) for ln in body.splitlines() if ln.startswith("data: ")]
+    detail = next(e for e in events if e["state"] == "detail")
+    assert len(detail["pages"]) == 2 and detail["signals"]["meta_pixel"] and detail["phones"] == ["+61 8 0000 0000"]
+    assert {f["kind"] for f in detail["findings"]} == {"phone_not_tappable", "no_local_schema"}
+    assert "sitemap present" in detail["passed"] and "canonical declared" in detail["passed"] and "online booking link present" in detail["passed"]
+    _s, _h, today = _req(srv, "GET", "/", cookie=cookie)
+    assert "Read-only until you approve." in today
+
+
 def test_status_chip_and_approve_all(server, workspace, store):
     srv, ctx = server
     cookie = "rs=" + make_token()

@@ -285,6 +285,33 @@ def deployable_fix(finding: dict[str, Any], ctx: BusinessContext, signals: dict[
     return None
 
 
+def passed_checks(crawl: dict[str, Any], signals: dict[str, Any], findings: list[dict[str, Any]]) -> list[str]:
+    """What was checked and found fine — shown next to the findings so the audit is not only a list of problems."""
+    kinds = {f["kind"] for f in findings}
+    out = []
+    if crawl.get("ok"):
+        if crawl.get("sitemap_found") or "no_sitemap" not in kinds:
+            out.append("sitemap present")
+        if "missing_title" not in kinds:
+            out.append("every crawled page has a title")
+        if "missing_description" not in kinds:
+            out.append("every crawled page has a meta description")
+        if "thin_page" not in kinds:
+            out.append("no thin pages")
+        if "duplicate_title" not in kinds:
+            out.append("no duplicate titles")
+    if signals.get("ok"):
+        if signals.get("tel_link") or not signals.get("phone_text"):
+            out.append("phone number tappable" if signals.get("tel_link") else "no phone number shown")
+        if signals.get("local_schema"):
+            out.append("LocalBusiness schema present")
+        if signals.get("canonical"):
+            out.append("canonical declared")
+        if signals.get("booking_link"):
+            out.append("online booking link present")
+    return out
+
+
 class SeoWorker:
     name = "seo"
     description = "Crawl the site, compare authority with competitors, and queue prioritised SEO fixes."
@@ -349,4 +376,10 @@ class SeoWorker:
         return WorkerResult(ok=True, summary=f"{created} new site issue(s), {len(findings)} open, from {pages} crawled pages"
                             + (", authority compared" if gap and not gap.get("error") and gap.get("user_dr") is not None
                                else (f", authority unavailable ({gap.get('user_error') or gap.get('error')})" if gap else "")) + ".",
-                            actions_created=created, details={"pages": pages, "authority": gap})
+                            actions_created=created,
+                            details={"pages": pages, "authority": gap,
+                                     "urls": [pg.get("url") for pg in (crawl.get("pages") or []) if pg.get("url")][:60],
+                                     "signals": {k: signals.get(k) for k in ("meta_pixel", "google_ads_tag", "ga4", "booking_link", "tel_link", "local_schema", "canonical")} if signals.get("ok") else {},
+                                     "phones": signals.get("phones") or [],
+                                     "findings": [{"kind": f["kind"], "url": f["url"]} for f in findings],
+                                     "passed": passed_checks(crawl, signals, findings)})
