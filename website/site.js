@@ -286,3 +286,27 @@
     });
   });
 })();
+
+
+/* ══ Walkthrough: six real screenshots, auto-advancing; click a step to hold it ═ */
+(function () {
+  "use strict";
+  var root = document.getElementById("walkthrough");
+  if (!root) return;
+  var steps = [].slice.call(root.querySelectorAll(".stp"));
+  var img = root.querySelector(".stage-shot img");
+  var cap = root.querySelector(".stage-shot figcaption");
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var i = 0, timer = null, held = false;
+  function show(n) {
+    i = n % steps.length;
+    steps.forEach(function (b, k) { b.classList.toggle("is-on", k === i); b.setAttribute("aria-selected", k === i ? "true" : "false"); });
+    var b = steps[i];
+    img.classList.add("fade");
+    setTimeout(function () { img.src = b.getAttribute("data-shot"); img.alt = b.getAttribute("data-cap"); cap.textContent = b.getAttribute("data-cap"); img.classList.remove("fade"); }, 180);
+  }
+  function tick() { if (!held) show(i + 1); }
+  steps.forEach(function (b, k) { b.addEventListener("click", function () { held = true; show(k); }); });
+  root.addEventListener("mouseleave", function () { held = false; });
+  if (!reduce) timer = setInterval(tick, 4200);
+})();

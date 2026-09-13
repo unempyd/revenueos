@@ -134,6 +134,7 @@ h2{margin:var(--sp-10) 0 var(--sp-3);font-size:21px;font-weight:600;line-height:
 /* ── controls: feedback on press, not release ── */
 form{display:inline-flex;margin:0 var(--sp-2) var(--sp-2) 0}
 .chip{margin-right:10px}
+.agents{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px} .agentchip{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2)} .agentchip b{font-weight:600;color:var(--ink)} .agentchip.ok{border-color:var(--ok)} .agentchip.bad{border-color:#b00020}
 .stepper{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 var(--sp-5)} .step{padding:6px 14px;border-radius:var(--r-pill);border:1px solid var(--line);color:var(--ink-3);font-size:13px} .step.done{color:var(--ok);border-color:var(--ok)} .step.on{color:var(--accent);border-color:var(--accent)} .step.ok{color:var(--ok);border-color:var(--ok)} .step.bad{color:#b00020;border-color:#b00020} #feed{max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word} a.cta{display:inline-block;padding:10px 18px;border-radius:var(--r-btn);background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600}
 form.stack{display:block;flex:none;width:100%;margin:0 0 var(--sp-6)} form.stack input,form.stack textarea{width:100%;box-sizing:border-box} form.once{padding:var(--sp-5);border:1px solid var(--line-soft);border-radius:var(--r-card);background:var(--surface)}
 button{
@@ -489,10 +490,18 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                 )
                 for a in b.approved[:100]
             )
+            latest: dict[str, dict] = {}
+            for r in self.store.list_runs(limit=300):
+                latest.setdefault(r["kind"], r)
+            strip = "".join(
+                f'<span class="agentchip {"ok" if r.get("status") == "done" else "bad"}"><b>{html.escape(WORKER_LABEL.get(k, k))}</b> '
+                f'{html.escape((r.get("finished_at") or r.get("started_at") or "")[:16].replace("T", " "))}</span>'
+                for k, r in sorted(latest.items()))
+            agents_html = f'<div class="agents"><span class="type">Agents · last run</span>{strip}</div>' if strip else ""
             approved_html = (f"<h2>Approved, waiting to run ({len(b.approved)})</h2>"
                              "<p class='sub'>You said yes. Nothing happens until Execute; Execute sends the email or runs the skill and the result lands in RESULTS.</p>"
                              + approved_rows) if b.approved else ""
-            return (f'<div class="brief">{html.escape(chr(10).join(b.lines()))}</div>{run_form}'
+            return (f'<div class="brief">{html.escape(chr(10).join(b.lines()))}</div>{agents_html}{run_form}'
                     "<p class='sub'>Read-only until you approve. Every line below is something observed about this business; nothing sends, publishes, changes a site or spends until you press Approve and then Execute.</p>"
                     '<h2>Approve / Execute / Ignore</h2>'
                     + (rows or "<p>Nothing pending.</p>")
