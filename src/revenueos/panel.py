@@ -133,6 +133,7 @@ h2{margin:var(--sp-10) 0 var(--sp-3);font-size:21px;font-weight:600;line-height:
 
 /* ── controls: feedback on press, not release ── */
 form{display:inline-flex;margin:0 var(--sp-2) var(--sp-2) 0}
+form.stack{display:block;flex:none;width:100%;margin:0 0 var(--sp-6)} form.stack input,form.stack textarea{width:100%;box-sizing:border-box} form.once{padding:var(--sp-5);border:1px solid var(--line-soft);border-radius:var(--r-card);background:var(--surface)}
 button{
   font:inherit; font-size:14px; font-weight:500; letter-spacing:-.016em;
   min-height:36px; padding:8px 16px;
@@ -582,7 +583,7 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             return f'<div class="brief">{html.escape(chr(10).join(lines))}</div>{run}'
 
         def _onboard_form(self) -> str:
-            once = ('<form method="post" action="/onboard" class="once"><label>Connect once: your website</label>'
+            once = ('<form method="post" action="/onboard" class="stack once"><label>Connect once: your website</label>'
                     '<input name="from_url" placeholder="https://yourbusiness.com" required>'
                     '<p><button class="x">Read my site and fill this in</button></p>'
                     "<p class='sub'>RevenueOS reads the site and writes the answers below; every inference is labelled. Correct anything afterwards.</p></form>")
@@ -602,7 +603,7 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                 fields.append(f"<label>{html.escape(prompt)}</label>" + (
                     f'<textarea name="{key}" rows="3">{html.escape(value)}</textarea>' if tag == "textarea"
                     else f'<input name="{key}" value="{html.escape(value)}">'))
-            return '<form method="post" action="/onboard">' + "".join(fields) + '<p><button class="x">Save and connect</button></p></form>'
+            return '<form method="post" action="/onboard" class="stack">' + "".join(fields) + '<p><button class="x">Save and connect</button></p></form>'
 
         # ── POST ──
         def do_POST(self) -> None:

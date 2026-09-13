@@ -54,9 +54,10 @@ adds on top of everything below it:
 
 Be precise about the difference, because it matters to what you're buying:
 
-- **Gated in code today:** continuous orchestrator operation. `revenueos orchestrator`
-  checks the installed licence before it will run in its always-on mode; without a
-  Pro-or-higher licence it declines to start and tells you why. One-shot runs
+- **Gated in code today, pay-on-result:** continuous orchestrator operation. `revenueos orchestrator`
+  runs free until the workspace has a measured result on an action you approved, then 14 more
+  days, then it asks for a Pro-or-higher licence and tells you why (`billing.pay_on_result`).
+  There is no clock before you have seen a result. One-shot runs
   (`revenueos run <worker>`, `revenueos run all`) are never gated — Community can run
   every worker as often as you like by hand or from your own cron.
 - **Hosted-service commitments, not code gates:** the remaining Pro features (advanced
