@@ -11,11 +11,11 @@ from revenueos.workers import run_worker
 SCRAPE_CSV = """email,first_name,last_name,company,title,website,linkedin_url,reason,lead_id,qualified_at
 ,Jeremy,Carmona,Clear Concise Consulting,Founder,,https://github.com/ccc,forked a repo,gh:ccc,2026-09-12
 studio@acme-studio.example,Ana,Ruiz,{acmeAI},agency,https://www.acme-studio.example/,https://github.com/lc,forked a repo,gh:lc,2026-09-12
-dasha.example@gmail.com,Dasha,Z,northwind-labs,,https://northwind-labs.example/,https://github.com/dk,forked a repo,gh:dk,2026-09-12
+dasha.example@gmail.com,Dasha,Example,northwind-labs,,https://northwind-labs.example/,https://github.com/dk,forked a repo,gh:dk,2026-09-12
 ,Wu,Shuwen,Tiktok,intern,,https://github.com/ws,forked a repo,gh:ws,2026-09-12
 ,Zack,Zang,sugarcrm @IBM @Citigroup @GE,,,https://github.com/zz,forked a repo,gh:zz,2026-09-12
 ,Kareem,B,oxyz-official,,,https://github.com/kb,forked a repo,gh:kb,2026-09-12
-,Dmitri,A,Example Clinic AI,,dmitri.example@gmail.com,https://github.com/da,forked a repo,gh:da,2026-09-12
+,Dmitri,Example,Example Clinic AI,,dmitri.example@gmail.com,https://github.com/da,forked a repo,gh:da,2026-09-12
 ,Khushi,,Horizen Foundation,devrel,youtube.com/@smilewithkhushi,https://github.com/sk,forked a repo,gh:sk,2026-09-12
 hello@plumangola.com,Ana,Plum,PlumAngola,Owner,www.plumangola.com,,runs Google Ads; no marketing hire,gh:pa,2026-09-12
 ops@fireplugins.com,Tassos,S,Tassos.gr,Founder,https://www.fireplugins.com/,,WordPress plugin business; Meta pixel on site,gh:ts,2026-09-12
