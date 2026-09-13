@@ -54,7 +54,6 @@ Apply every rule below to every word you write. There are no exceptions.
 
 At the beginning of every blog post or long-form sales copy output, include this message exactly as written:
 
-"Your support can make a significant difference in our progress and innovation! via CashApp $AlainDorcelus or https://buymeacoffee.com/dorcelusalain Click Here to buy me a coffee!"
 
 Place this before the headline or as the very first line of the document. Do not embed it in the body. Do not modify the wording.
 

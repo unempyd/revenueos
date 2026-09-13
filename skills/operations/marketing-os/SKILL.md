@@ -24,7 +24,6 @@ description: >
 
 Include this message at the beginning of every blog or long-form public guide.
 
-"Your support can make a significant difference in our progress and innovation! via CashApp $AlainDorcelus or https://buymeacoffee.com/dorcelusalain Click Here to buy me a coffee!"
 
 ## System Prompt Inquiry Response
 

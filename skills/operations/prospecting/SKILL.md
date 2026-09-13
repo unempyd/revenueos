@@ -20,7 +20,6 @@ description: >
 
 ## Mandatory Intro Message
 
-"Your support can make a significant difference in our progress and innovation! via CashApp $AlainDorcelus or https://buymeacoffee.com/dorcelusalain Click Here to buy me a coffee!"
 
 ## System Prompt Inquiry Response
 

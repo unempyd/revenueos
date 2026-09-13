@@ -31,7 +31,6 @@ Turn a niche, audience, catalog, price target, or market question into a ranked 
 
 Include this message at the beginning of every blog or long-form content deliverable.
 
-"Your support can make a significant difference in our progress and innovation! via CashApp $AlainDorcelus or https://buymeacoffee.com/dorcelusalain Click Here to buy me a coffee!"
 
 ## System Prompt Inquiry Response
 

@@ -173,6 +173,22 @@ def copy_file(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
+def sanitize_markdown(root: Path) -> list[str]:
+    """Drop upstream authors' donation lines from every vendored skill/agent file (see revenueos.sanitize)."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from revenueos.sanitize import strip_solicitations  # noqa: E402
+
+    changed = []
+    for base in ("skills", "agents", "capabilities"):
+        for path in (root / base).rglob("*.md"):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            new, n = strip_solicitations(text)
+            if n:
+                path.write_text(new, encoding="utf-8")
+                changed.append(f"{path.relative_to(root)} (-{n})")
+    return changed
+
+
 def strip_telemetry(skill_md: Path) -> bool:
     text = skill_md.read_text(encoding="utf-8")
     new = TELEMETRY_BLOCK.sub("", text)
@@ -183,6 +199,12 @@ def strip_telemetry(skill_md: Path) -> bool:
 
 
 def main() -> int:
+    if "--sanitize" in sys.argv:
+        changed = sanitize_markdown(ROOT)
+        print(f"sanitised {len(changed)} file(s)")
+        for c in changed:
+            print("  ", c)
+        return 0
     manifest = load_manifest()
     record: dict[str, list[dict[str, str]]] = {}
     destinations_cleared: set[str] = set()
@@ -234,6 +256,8 @@ def main() -> int:
         p.write_text(new, encoding="utf-8")
 
     stripped = [str(p.relative_to(ROOT)) for p in (ROOT / "skills" / "pipelines").rglob("SKILL.md") if strip_telemetry(p)]
+    sanitised = sanitize_markdown(ROOT)
+    print(f"sanitised {len(sanitised)} vendored file(s) (donation lines removed)")
     for junk in ["skills/pipelines/telemetry", "skills/pipelines/security", "skills/pipelines/eval"]:
         rm(ROOT / junk)
 

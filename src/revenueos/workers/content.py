@@ -16,6 +16,7 @@ from ..context import BusinessContext
 from ..llm import LLM, Message
 from ..paths import Workspace
 from ..registry import load_registry, skill_text
+from ..sanitize import SOLICIT_RE, deliverable_lint, strip_solicitations
 from ..store import Store
 from . import WorkerResult
 
@@ -157,16 +158,27 @@ def execute_content(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM 
         return "cannot run a skill without an LLM credential (set ANTHROPIC_API_KEY); marked executed by hand."
     c = action["context"]
     source, slug = c["skill"].split("/", 1)
-    skill_md = skill_text(ws, source, slug)
+    skill_md, _ = strip_solicitations(skill_text(ws, source, slug))
     task = c.get("skill_input") or action["content"]
     system = (
         "You are a worker inside RevenueOS, an autonomous revenue department. Follow the SKILL below exactly, "
         "using only the business context provided. Never invent metrics, customers or proof (truth-rules). "
-        "Return the finished deliverable in Markdown, ready for a human to approve.\n\n=== SKILL ===\n" + skill_md[:60000]
+        "The deliverable is for the business named in the context and no one else: do not address it to, "
+        "credit, or mention any operator, tool author, personal email address or payment link. "
+        "Where the task lists facts observed on the page (phone numbers, links, addresses), use them verbatim "
+        "instead of placeholders. Return the finished deliverable in Markdown, ready for a human to approve."
+        "\n\n=== SKILL ===\n" + skill_md[:60000]
     )
     user = f"=== BUSINESS CONTEXT ===\n{ctx.prompt_summary()}\n\n=== TASK ===\n{action['title']}\n{task}"
     out = llm.complete_sync([Message("system", system), Message("user", user)], max_tokens=8000)
+    sender = ((ctx.config.get("sender") or {}).get("email") or "").lower()
+    site_domain = re.sub(r"^https?://(www\.)?", "", ctx.website or "").split("/")[0].lower()
+    cleaned, notes = deliverable_lint(out, allowed_emails={sender} if sender else set(),
+                                      allowed_domains={site_domain} if site_domain else set())
+    if SOLICIT_RE.search(cleaned):
+        raise RuntimeError("deliverable still carries a payment solicitation after cleaning; not written")
     safe = re.sub(r"[^a-z0-9]+", "-", f"{slug}-{action['id']}".lower()).strip("-")
     path = ws.outputs / f"{datetime.now(UTC):%Y%m%d}-{safe}.md"
-    path.write_text(f"# {action['title']}\n\n_skill: {c['skill']}_\n\n{out}\n", encoding="utf-8")
-    return f"deliverable written to {path.relative_to(ws.root)}"
+    path.write_text(f"# {action['title']}\n\n{cleaned}", encoding="utf-8")
+    note = f" ({'; '.join(notes)})" if notes else ""
+    return f"deliverable written to {path.relative_to(ws.root)}{note}"

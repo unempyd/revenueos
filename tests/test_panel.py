@@ -1,6 +1,8 @@
 """The control surface, driven over real HTTP against a server thread."""
 from __future__ import annotations
 
+import html
+
 import http.client
 import json
 import threading
@@ -73,7 +75,7 @@ def test_onboard_run_approve_execute_results_over_http(server, workspace, store,
     status, headers, _ = _req(srv, "POST", f"/action/{follow['id']}/approve", "", cookie=cookie)
     # an approved action does not vanish: it stays on TODAY as "waiting to run" until executed or ignored
     _s, _h, page = _req(srv, "GET", "/", cookie=cookie)
-    assert "Approved, waiting to run (1)" in page and follow["title"][:40] in page and "Execute now" in page
+    assert "Approved, waiting to run (1)" in page and html.escape(follow["title"][:40]) in page and "Execute now" in page
     assert status == 303 and "Approved" in headers["Location"]
     status, headers, _ = _req(srv, "POST", f"/action/{follow['id']}/execute", "", cookie=cookie)
     assert status == 303 and "Executed" in headers["Location"] and "dry-run" in headers["Location"]

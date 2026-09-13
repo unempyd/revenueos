@@ -53,7 +53,7 @@ SIGNAL_PATTERNS = {
     "tel_link": r"href=[\"']tel:",
     "mailto_link": r"href=[\"']mailto:",
     "booking_link": r"href=[\"'][^\"']*(?:book|appointment|reserve|schedule)[^\"']*[\"']",
-    "phone_text": r"(?:\+\d{1,3}[ \-]?)?(?:\(0?\d{1,3}\)|0\d{1,3})[ \-]?\d{3,4}[ \-]?\d{3,4}",
+    "phone_text": r"(?:\+\d{1,3}[ \-]?(?:\(\d{1,4}\)[ \-]?)?\d(?:[ \-]?\d){6,11}|\(?0\d{1,3}\)?(?:[ \-]?\d){7,9})",
     "meta_pixel": r"connect\.facebook\.net/[a-z_]+/fbevents\.js|fbq\(\s*['\"]init",
     "google_ads_tag": r"AW-\d{6,}|googleadservices\.com/pagead/conversion",
     "ga4": r"\bG-[A-Z0-9]{6,}\b",
@@ -81,11 +81,25 @@ def homepage_signals(site: str, timeout: float = 15.0) -> dict[str, Any]:
 
 
 def parse_signals(html: str, url: str) -> dict[str, Any]:
+    """Boolean signals plus the facts a deliverable needs verbatim: phone numbers as shown, the booking link,
+    email addresses on the page."""
+    import html as html_mod
     import re
 
     out: dict[str, Any] = {"ok": True, "url": url}
     for name, pattern in SIGNAL_PATTERNS.items():
         out[name] = bool(re.search(pattern, html, re.I))
+    visible = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", html)  # never read phone digits out of a pixel id
+    text = html_mod.unescape(re.sub(r"<[^>]+>", " ", visible))
+    phones = []
+    for m in re.finditer(r"(?<!\d)" + SIGNAL_PATTERNS["phone_text"] + r"(?!\d)", text):
+        ph = re.sub(r"\s+", " ", m.group(0)).strip()
+        if sum(ch.isdigit() for ch in ph) >= 8 and ph not in phones:
+            phones.append(ph)
+    out["phones"] = phones[:4]
+    m = re.search(SIGNAL_PATTERNS["booking_link"], html, re.I)
+    out["booking_url"] = re.search(r"href=[\"']([^\"']+)", m.group(0), re.I).group(1) if m else None
+    out["emails"] = sorted({e.lower() for e in re.findall(r"mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", html, re.I)})[:4]
     return out
 
 
@@ -94,13 +108,21 @@ def signal_findings(site: str, signals: dict[str, Any]) -> list[dict[str, Any]]:
         return []
     url = signals.get("url") or site
     out = []
+    facts = []
+    if signals.get("phones"):
+        facts.append("phone numbers shown on the page: " + ", ".join(signals["phones"]))
+    if signals.get("booking_url"):
+        facts.append(f"booking link: {signals['booking_url']}")
+    if signals.get("emails"):
+        facts.append("email on the page: " + ", ".join(signals["emails"]))
+    observed = (" Observed: " + "; ".join(facts) + ".") if facts else ""
     if signals.get("phone_text") and not signals.get("tel_link"):
         out.append({"kind": "phone_not_tappable", "url": url,
-                    "why": "The homepage shows a phone number as plain text with no tel: link, so visitors on a phone cannot tap to call.",
-                    "before": {"tel_link": False, "phone_text": True}})
+                    "why": "The homepage shows a phone number as plain text with no tel: link, so visitors on a phone cannot tap to call." + observed,
+                    "before": {"tel_link": False, "phone_text": True, "phones": signals.get("phones", [])}})
     if not signals.get("local_schema"):
         out.append({"kind": "no_local_schema", "url": url,
-                    "why": "No LocalBusiness (or a subtype such as HairSalon) schema.org markup on the homepage; Google cannot read the business type, address and hours from the page.",
+                    "why": "No LocalBusiness (or a subtype such as HairSalon) schema.org markup on the homepage; Google cannot read the business type, address and hours from the page." + observed,
                     "before": {"local_schema": False}})
     if not signals.get("canonical"):
         out.append({"kind": "no_canonical", "url": url, "why": "The homepage declares no canonical URL.", "before": {"canonical": False}})

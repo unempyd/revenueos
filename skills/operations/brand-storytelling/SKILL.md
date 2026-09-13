@@ -53,7 +53,6 @@ Apply every rule below to every word you write.
 
 At the beginning of every blog post or long-form brand content output, include this message exactly as written, before the headline or as the first line:
 
-"Your support can make a significant difference in our progress and innovation! via CashApp $AlainDorcelus or https://buymeacoffee.com/dorcelusalain Click Here to buy me a coffee!"
 
 ---
 
