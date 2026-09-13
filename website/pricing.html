@@ -113,9 +113,10 @@
 
   <section class="center">
     <div class="eyebrow">Pricing</div>
-    <h1>Self-hosted software. Hosted billing.</h1>
-    <p class="lede center">You always run RevenueOS on your own infrastructure. Paid tiers unlock
-      capability through a signed licence key, issued the moment Stripe confirms your subscription.</p>
+    <h1>Everything runs free. Pay when you agree with the result.</h1>
+    <p class="lede center">Run RevenueOS yourself, or ask us to run it for you. Nothing is charged until it has
+      measured a result you approved; then a signed licence key, emailed to you after payment, keeps continuous
+      operation on.</p>
 
     <div class="price-grid">
       <div class="price-card">
@@ -162,8 +163,8 @@
           <li>Campaign fleets</li>
           <li>Approval controls &amp; centralized analytics</li>
         </ul>
-        <div class="tier-note">Hosted: we run the orchestrator and panel for you; a
-          signed licence key unlocks continuous operation on self-hosted installs.</div>
+        <div class="tier-note">Several brands, one install. Run it yourself or ask us to run it for you; the
+          same pay-after-an-agreed-result rule applies.</div>
         <a class="cta-btn ghost block" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+business">Request Business</a>
       </div>
 
@@ -178,8 +179,8 @@
           <li>Client workspaces</li>
           <li>Full API access</li>
         </ul>
-        <div class="tier-note">Hosted: we run the orchestrator and panel for you; a
-          signed licence key unlocks continuous operation on self-hosted installs.</div>
+        <div class="tier-note">Client workspaces under one install, each with its own canon, connections and
+          results. Run it yourself or ask us to run it for you.</div>
         <a class="cta-btn ghost block" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+agency">Request Agency</a>
       </div>
     </div>
@@ -202,8 +203,8 @@
         <tbody>
           <tr class="group-row"><th colspan="5">Operation</th></tr>
           <tr><th>Manual worker runs</th><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><th>Continuous operation (orchestrator)</th><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><th>Automated monitoring</th><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><th>Continuous operation (orchestrator)</th><td class="yes">✓ until 14 days after your first agreed result</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><th>Automated monitoring</th><td class="yes">✓ same rule</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
 
           <tr class="group-row"><th colspan="5">Intelligence</th></tr>
           <tr><th>Advanced audits</th><td class="no">–</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
@@ -235,8 +236,8 @@
     <div class="billing-note">
       <h3>How the licence key gets to your install</h3>
       <ol>
-        <li>Choose a tier above — you're sent to a Stripe Checkout page for that subscription.</li>
-        <li>Stripe confirms the subscription and calls RevenueOS Inc.'s webhook.</li>
+        <li>Request a tier above. When RevenueOS has measured a result you approved, you get a Stripe payment link.</li>
+        <li>Stripe confirms the payment.</li>
         <li>We sign a licence key for your account and email it to the address on the subscription.</li>
         <li>Run <code>revenueos license install &lt;key&gt;</code> on your install — <code>revenueos license show</code> confirms the tier.</li>
       </ol>

@@ -157,15 +157,15 @@ either, every worker still runs its deterministic checks.
 
 ## Community and Hosted
 
-**RevenueOS Community** (free, MIT): the CLI and every worker run manually, the control
-panel on localhost, the capability packs (13 packs, 790 skills, 104 agents, 64 connector
-CLIs), the MCP server and Claude Code plugin exposing six capabilities: SEO Auditor,
-Ads Auditor, Lead Discovery, Sales Follow-up, Marketing Intelligence, Revenue Monitor.
+**RevenueOS Community** (free, MIT): everything — every worker, continuous operation, the control
+panel, connections and executors, the capability packs (13 packs, 790 skills, 104 agents, 64 connector
+CLIs), the MCP server and the Claude Code plugin — free until RevenueOS has measured a result you
+approved, then 14 more days.
 
-**RevenueOS Hosted** (Pro $99, Business $299, Agency $999 per month): continuous operation,
-the panel deployed for you, connectors, approved execution, measurement history and billing.
-A signed licence key unlocks continuous operation on self-hosted installs. Details:
-[docs/community-vs-hosted.md](docs/community-vs-hosted.md).
+**RevenueOS Pro / Business / Agency** ($99 / $299 / $999 per month): keeps continuous operation on
+after that, and adds several brands under one install (Business) or client workspaces (Agency). Run it
+yourself, or ask us to run it for you. A signed licence key, emailed after payment, unlocks the tier.
+Details: [docs/community-vs-hosted.md](docs/community-vs-hosted.md).
 
 ## Security and approval
 
