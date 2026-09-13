@@ -132,3 +132,61 @@ def test_unknown_status_and_kind_are_refused(store):
         store.set_objective_status(oid, "finished")
     with pytest.raises(ValueError):
         store.add_objective_event(oid, "vibes", "nope")
+
+
+MANDATE = """RevenueOS — Non-Negotiable Commercial Operating Mandate
+
+Purpose
+
+RevenueOS is not to be treated as a static software repository.
+
+Non-Negotiable Commercial Objective
+
+The primary responsibility of the RevenueOS agent organisation is:
+
+Generate real revenue through RevenueOS by finding businesses for which the system can create measurable commercial value.
+
+Revenue generation is therefore not a secondary marketing activity.
+"""
+
+
+def test_heartbeat_derives_the_objective_from_the_mandate_file(workspace, store, onboarded):
+    from revenueos.objectives import read_mandate
+    from revenueos.workers import run_worker
+
+    assert read_mandate(workspace) is None
+    (workspace.root / "REVENUEOS_OPERATOR_MANDATE.md").write_text(MANDATE)
+    m = read_mandate(workspace)
+    assert m["title"] == "RevenueOS — Non-Negotiable Commercial Operating Mandate"
+    assert m["objective"].startswith("Generate real revenue through RevenueOS")
+
+    r = run_worker("heartbeat", workspace, store, onboarded, None)
+    assert r.ok and r.details["mandate"]["created"] is True
+    assert "mandate: REVENUEOS_OPERATOR_MANDATE.md" in r.summary
+    active = store.list_objectives("active")
+    assert len(active) == 1 and active[0]["title"].startswith("Generate real revenue through RevenueOS")
+    evidence = store.list_objective_events(active[0]["id"], limit=50, kind="evidence")
+    assert len(evidence) == 1 and evidence[0]["ref"]["mandate_sha"] == m["sha"]
+
+    # idempotent: a second run creates nothing and records nothing new
+    r2 = run_worker("heartbeat", workspace, store, onboarded, None)
+    assert r2.details["mandate"]["created"] is False and r2.details["mandate"]["recorded"] is False
+    assert len(store.list_objectives("active")) == 1
+    assert len(store.list_objective_events(active[0]["id"], limit=50, kind="evidence")) == 1
+
+    # a changed mandate is visible in the trail, still without a second objective
+    (workspace.root / "REVENUEOS_OPERATOR_MANDATE.md").write_text(MANDATE + "\nAddendum.\n")
+    run_worker("heartbeat", workspace, store, onboarded, None)
+    assert len(store.list_objectives("active")) == 1
+    assert len(store.list_objective_events(active[0]["id"], limit=50, kind="evidence")) == 2
+
+
+def test_existing_objective_is_bound_to_the_mandate_not_duplicated(workspace, store, onboarded):
+    from revenueos.objectives import objective_from_mandate
+
+    oid = store.create_objective("Increase qualified leads", strategy=None)
+    (workspace.root / "MANDATE.md").write_text("# Grow bookings\n\nBook more appointments through the website this quarter.\n")
+    out = objective_from_mandate(store, workspace)
+    assert out["objective_id"] == oid and out["created"] is False
+    assert len(store.list_objectives("active")) == 1
+    assert store.list_objective_events(oid, limit=10, kind="evidence")[0]["text"].startswith("mandate read: MANDATE.md")

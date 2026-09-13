@@ -157,8 +157,8 @@ either, every worker still runs its deterministic checks.
 
 ## It keeps working between sessions
 
-RevenueOS holds an **objective** for the business (`revenueos objective add "…"`, or the last
-onboarding question) and a **heartbeat** worker, scheduled every 30 minutes, that reads the
+RevenueOS holds an **objective** for the business (`revenueos objective add "…"`, the last
+onboarding question, or a `MANDATE.md` at the workspace root that the heartbeat reads and the orchestrator reports on `/health`) and a **heartbeat** worker, scheduled every 30 minutes, that reads the
 state of that objective: what is pending, what was approved and not yet run, what was measured,
 what failed and why, what is blocked and what would unblock it. It writes one dated event per run,
 sets the next action, and leaves a message for you only when a human is needed

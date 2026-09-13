@@ -20,6 +20,7 @@ import { loadWorkerAutomations, type WorkerAutomation } from './automations.js';
 import { nextRun } from './schedule.js';
 import { runSkillHeadless, type RunOutcome } from './runner.js';
 import { createWorkerServer, type WorkerHealth } from './server.js';
+import { loadMandate, type MandateInfo } from './mandate.js';
 
 const TICK_MS = 30_000;
 const RETRY_DELAY_MS = 60_000;
@@ -27,12 +28,20 @@ const RETRY_DELAY_MS = 60_000;
 /** Same shape as WorkerHealth, but named for this project instead of Kairos. */
 interface OrchestratorHealth extends Omit<WorkerHealth, 'service'> {
   service: 'revenueos-orchestrator';
+  /** The governing mandate this workspace operates under (REVENUEOS_OPERATOR_MANDATE.md), if any. */
+  mandate: MandateInfo | null;
 }
 
 async function main(): Promise<void> {
   const root = process.env.REVENUEOS_ROOT ?? process.cwd();
   const store = new JsonlStore(root);
   const startedAt = new Date().toISOString();
+  const mandate = await loadMandate(root);
+  if (mandate) {
+    console.log(`worker: mandate read from ${mandate.path} (${mandate.chars} chars, sha ${mandate.sha}): "${mandate.title}"`);
+  } else {
+    console.log('worker: no mandate file in the workspace root (REVENUEOS_OPERATOR_MANDATE.md or MANDATE.md); the heartbeat runs on the stored objective alone');
+  }
 
   // A 'running' record surviving boot means the last worker died mid-run.
   for (const stale of await store.listRuns({ status: 'running', limit: 20 })) {
@@ -153,6 +162,7 @@ async function main(): Promise<void> {
   const getHealth = (): OrchestratorHealth => ({
     service: 'revenueos-orchestrator',
     startedAt,
+    mandate,
     timezone: process.env.TZ ?? 'UTC',
     automations: automations.map((a) => ({
       name: a.name,

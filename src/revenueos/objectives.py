@@ -11,8 +11,12 @@ daemon and no new product layer.
 """
 from __future__ import annotations
 
+import hashlib
+import re
+from pathlib import Path
 from typing import Any
 
+from .paths import Workspace
 from .store import OBJECTIVE_EVENT_KINDS, OBJECTIVE_STATUSES, Store
 
 __all__ = [
@@ -86,3 +90,60 @@ def render_objective(block: dict[str, Any] | None) -> list[str]:
     if block.get("others"):
         out.append(f"  (+{block['others']} more active objective(s) — revenueos objective list)")
     return out
+
+
+# ── the governing mandate ─────────────────────────────────────────────────
+MANDATE_FILES = ("REVENUEOS_OPERATOR_MANDATE.md", "MANDATE.md")
+
+
+def read_mandate(ws: Workspace) -> dict[str, Any] | None:
+    """The workspace's governing mandate, if a mandate file sits at its root.
+
+    Returns the path, the text, a short digest, the first line as title and the one sentence that
+    states the objective: the paragraph after "The primary responsibility of … is:" when present,
+    else the first paragraph that is not a heading. Nothing is inferred beyond that."""
+    for name in MANDATE_FILES:
+        path = Path(ws.root) / name
+        if path.is_file():
+            raw = path.read_bytes()
+            text = raw.decode("utf-8", errors="replace")
+            lines = [ln.strip() for ln in text.splitlines()]
+            title = next((ln.lstrip("# ").strip() for ln in lines if ln), "")
+            paragraphs = [pg.strip() for pg in re.split(r"\n\s*\n", text) if pg.strip()]
+            objective = ""
+            for i, pg in enumerate(paragraphs):
+                if re.search(r"primary responsibility .* is:\s*$", pg, re.I) and i + 1 < len(paragraphs):
+                    objective = paragraphs[i + 1]
+                    break
+            if not objective:
+                objective = next((pg for pg in paragraphs[1:] if not pg.startswith("#") and len(pg.split()) > 6), "")
+            objective = re.sub(r"\s+", " ", objective).strip()
+            return {"path": str(path), "text": text, "sha": hashlib.sha256(raw).hexdigest()[:12],
+                    "title": title, "objective": objective}
+    return None
+
+
+def objective_from_mandate(store: Store, ws: Workspace) -> dict[str, Any] | None:
+    """Bind the workspace's active objective to its mandate file.
+
+    No active objective → create one from the mandate's objective sentence. An active objective →
+    leave it; either way record one `evidence` event "mandate read …" per file digest, so a re-run
+    changes nothing and a changed mandate is visible in the objective's trail."""
+    m = read_mandate(ws)
+    if not m:
+        return None
+    active = store.list_objectives("active")
+    created = False
+    if active:
+        oid = active[0]["id"]
+    else:
+        title = (m["objective"] or m["title"])[:200]
+        oid = store.create_objective(title, strategy=None)
+        created = True
+    tag = f"mandate read: {Path(m['path']).name} sha {m['sha']}"
+    seen = any((e.get("ref") or {}).get("mandate_sha") == m["sha"]
+               for e in store.list_objective_events(oid, limit=1000, kind="evidence"))
+    if not seen:
+        store.add_objective_event(oid, "evidence", f"{tag} — \"{m['title']}\"",
+                                  {"mandate_sha": m["sha"], "path": m["path"], "chars": len(m["text"])})
+    return {"objective_id": oid, "created": created, "path": m["path"], "sha": m["sha"], "title": m["title"], "recorded": not seen}

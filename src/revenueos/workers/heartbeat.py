@@ -20,6 +20,7 @@ from typing import Any
 
 from ..context import BusinessContext
 from ..llm import LLM
+from ..objectives import objective_from_mandate
 from ..paths import Workspace
 from ..store import Store
 from ..today import rank_next
@@ -264,6 +265,7 @@ class HeartbeatWorker:
     upstream = "RevenueOS (Prime Agent's persistent goals + heartbeat, adapted to the store and the orchestrator)"
 
     def run(self, ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, run_id: int) -> WorkerResult:
+        mandate = objective_from_mandate(store, ws)  # the governing document, if the workspace carries one
         state = read_state(store)
         objectives = state["objectives"]
         primary = objectives[0] if objectives else None
@@ -286,7 +288,9 @@ class HeartbeatWorker:
 
         messages_posted = _notify(store, state, next_line, failures_new)
 
-        state = {**state, "next_action": next_line, "result_events_added": results_added,
+        if mandate:
+            summary = summary + f" · mandate: {mandate['path'].rsplit('/', 1)[-1]} (sha {mandate['sha']})"
+        state = {**state, "mandate": mandate, "next_action": next_line, "result_events_added": results_added,
                  "failure_events_added": failures_new, "messages_posted": messages_posted,
                  "objectives_updated": [o["id"] for o in objectives],
                  "role_run": role_note}
