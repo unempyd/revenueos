@@ -310,3 +310,17 @@
   root.addEventListener("mouseleave", function () { held = false; });
   if (!reduce) timer = setInterval(tick, 4200);
 })();
+
+/* hero recording: plays only while on screen, never under reduced motion */
+(function () {
+  "use strict";
+  var v = document.querySelector(".hero-video");
+  if (!v) return;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!("IntersectionObserver" in window)) { v.play().catch(function () {}); return; }
+  new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { v.play().catch(function () {}); } else { v.pause(); }
+    });
+  }, { threshold: 0.4 }).observe(v);
+})();

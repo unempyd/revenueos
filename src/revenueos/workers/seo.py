@@ -52,7 +52,8 @@ SKILL_FOR = {
 SIGNAL_PATTERNS = {
     "tel_link": r"href=[\"']tel:",
     "mailto_link": r"href=[\"']mailto:",
-    "booking_link": r"href=[\"'][^\"']*(?:book|appointment|reserve|schedule)[^\"']*[\"']",
+    # "book" must start a word: facebook.com links are social profiles, not booking pages
+    "booking_link": r"href=[\"'][^\"']*(?:(?<![a-z])book|appointment|reserve|schedule)[^\"']*[\"']",
     "phone_text": r"(?:\+[1-9]\d{0,2}[ \-]?(?:\(\d{1,4}\)[ \-]?)?\d(?:[ \-]?\d){6,11}|\(?0\d{1,3}\)?(?:[ \-]?\d){7,9})",
     "meta_pixel": r"connect\.facebook\.net/[a-z_]+/fbevents\.js|fbq\(\s*['\"]init",
     "google_ads_tag": r"AW-\d{6,}|googleadservices\.com/pagead/conversion",
@@ -104,9 +105,27 @@ def parse_signals(html: str, url: str) -> dict[str, Any]:
     text = re.sub(r"\sd=[\"'][^\"']*[\"']", " ", text)  # stray path data outside <svg>
     text = re.sub(r"[\u00a0\u2007\u202f\u2009]", " ", text)  # non-breaking and thin spaces inside numbers
     phones = []
-    for m in re.finditer(r"(?<!\d)" + SIGNAL_PATTERNS["phone_text"] + r"(?!\d)", text):
+    # Two more false-positive shapes, seen on real sites: a date/timestamp run embedded in an
+    # image filename ("2024-09-11-14-47-06" reads as local number "09-11-14-47-06") and a SKU or
+    # tracking id that happens to be all digits but far longer than any real phone number
+    # ("0462806720515", 13 digits). Neither is a phone number the extraction should ever surface,
+    # so a candidate is rejected when: (a) it is immediately flanked by a separator that is itself
+    # flanked by a digit \u2014 i.e. it is a slice out of a longer separator-joined numeric token \u2014 or
+    # (b) its own digit count falls outside a real phone number's range (local: 9-11 digits
+    # including the leading 0; international "+...": up to 15 digits, the ITU E.164 ceiling).
+    # (c) A hex id ("01a05801-3517-74cc-…", a Shopify extension UUID) yields a slice such as
+    # "05801-3517-74" whose neighbours are letters, not digits: a candidate touching a letter or
+    # digit on either side is part of a longer token and is rejected too ("Phone:0438…" keeps its
+    # colon and passes).
+    boundary_pre, boundary_post = r"(?<![A-Za-z0-9])(?<!\d[\-/.:_])", r"(?![A-Za-z0-9])(?![\-/.:_]\d)"
+    for m in re.finditer(boundary_pre + SIGNAL_PATTERNS["phone_text"] + boundary_post, text):
         ph = re.sub(r"\s+", " ", m.group(0)).strip()
-        if sum(ch.isdigit() for ch in ph) >= 8 and ph not in phones:
+        digit_chars = [ch for ch in ph if ch.isdigit()]
+        digits = len(digit_chars)
+        lo, hi = (8, 15) if ph.startswith("+") else (9, 11)
+        # A run of one repeated digit ("0000000000") is an image/thumbnail cache-buster
+        # placeholder, never a real phone number, no matter how many digits it has.
+        if lo <= digits <= hi and len(set(digit_chars)) > 1 and ph not in phones:
             phones.append(ph)
     intl = [ph for ph in phones if ph.startswith("+")]
     out["phones"] = (intl or phones)[:3]  # a site that prints its country code is telling you which numbers are its own

@@ -141,8 +141,8 @@ either, every worker still runs its deterministic checks.
 | Worker | Discovers | Executes (after approval) | Measures |
 |---|---|---|---|
 | `seo` | crawl defects, authority gap, indexing surface | the matching SEO skill | re-crawl: fixed or not |
-| `ads-audit` | wasted spend, over-pacing, concentration in ad exports, then the full control audit: 97 Google / 72 Meta controls (414 across 12 platforms) evaluated under the upstream runtime contract, pass/fail only with evidence | the matching ads skill | next export delta; a failing control re-checked by the next audit |
-| `ads-live` | the same on connected Google Ads / Meta accounts; wasting campaigns become pause / budget actions | `ads_pause`, `ads_budget` | next spend read |
+| `ads-audit` | wasted spend, over-pacing, concentration in ad exports; search terms that spend, convert nothing and are not excluded (drop Google's keyword and search-term downloads beside the export); then the full control audit: 97 Google / 72 Meta controls (414 across 12 platforms) evaluated under the upstream runtime contract, pass/fail only with evidence | the matching ads skill | next export delta; the next search-term read; a failing control re-checked by the next audit |
+| `ads-live` | the same on connected Google Ads / Meta accounts, with keywords, quality scores, search terms and negative-keyword lists read from Google Ads; wasting campaigns become pause / budget actions | `ads_pause`, `ads_budget` | next spend read |
 | `analytics` | Search Console queries losing clicks, GA4 channel results | the title/description skill | next Search Console read |
 | `billing` | Stripe revenue, MRR, customers, open invoices | `send_invoice` | Stripe paid status |
 | `discover` | prospects from lead lists or an external prospecting service, through the qualification gate (business email + website + real company; reported as found · contactable · qualified) | — | via outreach |
@@ -154,6 +154,24 @@ either, every worker still runs its deterministic checks.
 
 `revenueos orchestrator` runs the workers on a schedule (`data/automations.json`);
 `revenueos serve` is the control panel with password sessions, onboarding, the brief and results.
+
+## It keeps working between sessions
+
+RevenueOS holds an **objective** for the business (`revenueos objective add "…"`, or the last
+onboarding question) and a **heartbeat** worker, scheduled every 30 minutes, that reads the
+state of that objective: what is pending, what was approved and not yet run, what was measured,
+what failed and why, what is blocked and what would unblock it. It writes one dated event per run,
+sets the next action, and leaves a message for you only when a human is needed
+(`revenueos messages`, or the "Inbox from RevenueOS" block on TODAY). Nothing in it sends,
+publishes or spends.
+
+Specialised **roles** (`revenueos agent run research|marketing|sales|measurement "<task>"`) answer
+one question each with cited evidence, may spawn sub-tasks two levels deep, and can only
+*propose* actions, which land on TODAY like every other one. Every measured outcome becomes a
+dated **lesson** (`revenueos learn`, `learning-loop/LESSONS.md`) that is injected into the next
+prompts; role specs are refined by small evidence-backed edits with snapshots and rollback
+(`revenueos refine <role> …`). Any of this works without a model, except the roles, which then say
+so instead of answering.
 
 ## Community and Hosted
 

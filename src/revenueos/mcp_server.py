@@ -26,7 +26,7 @@ from .paths import Workspace
 from .registry import search_skills
 from .store import Store
 from .today import build_brief
-from .workers import all_workers, execute_action, run_worker
+from .workers import all_workers, execute_action, refused, run_worker
 
 mcp = FastMCP(
     "revenueos",
@@ -172,6 +172,8 @@ def revenueos_execute(action_id: int) -> dict[str, Any]:
     llm = maybe_llm()
     try:
         outcome = execute_action(ws, store, ctx, llm, action)
+        if refused(outcome):
+            return {"ok": False, "action_id": action_id, "title": action["title"], "outcome": outcome, "error": "not executed: " + outcome}
         store.set_action_status(action_id, "executed")
         store.record_outcome(action_id, "pending", note="awaiting measurement")
         return {"ok": True, "action_id": action_id, "title": action["title"], "outcome": outcome}
@@ -210,6 +212,20 @@ def revenueos_search_skills(query: str, limit: int = 10) -> list[dict[str, Any]]
     return search_skills(ws, query, limit=limit)
 
 
+@mcp.tool()
+def revenueos_lessons(days: int = 60) -> dict[str, Any]:
+    """What RevenueOS learned from this business's own measured results: one dated lesson per
+    executed action that was measured (what was attempted, what the evidence showed, what to do
+    differently). Read this before proposing work — the same lessons are injected into every
+    worker prompt. Run `revenueos learn` (or the CLI) to derive new ones from recent outcomes;
+    nothing here is written by this tool."""
+    from .learning import recent_lessons
+
+    ws, _store, _ctx = _boot()
+    text = recent_lessons(ws, days=days, max_chars=20000)
+    return {"days": days, "lessons": text, "count": text.count("\n## ") + (1 if text else 0)}
+
+
 # ── resources ─────────────────────────────────────────────────────────────
 @mcp.resource("revenueos://today")
 def resource_today() -> str:
@@ -224,7 +240,8 @@ def resource_results() -> str:
     _ws, store, ctx = _boot()
     brief = build_brief(store)
     s = brief.summary
-    line1 = f"{s.get('found', 0)} opportunities found · {s.get('executed', 0)} executed · {s.get('measured', 0)} measured"
+    line1 = (f"actions: {s.get('found', 0)} found · {s.get('executed', 0)} executed · "
+             f"{s.get('measured', 0)} measured · {s.get('produced', 0)} produced (not published)")
     line2 = (
         f"{s.get('emails_sent', 0)} emails sent · {s.get('replies', 0)} replies · "
         f"{s.get('bounces', 0)} bounces · {s.get('booked', 0)} booked · ${s.get('pipeline_value', 0):,.0f} pipeline"

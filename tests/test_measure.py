@@ -30,7 +30,7 @@ def test_seo_fix_is_measured_by_recrawl(workspace, store, onboarded, monkeypatch
     # measure while the site is unchanged → no_effect
     monkeypatch.setattr(measure, "crawl_website", _fake_crawl(before))
     r = run_worker("measure", workspace, store, onboarded, None)
-    assert r.ok and r.details == {"measured": 0, "pending": 0}
+    assert r.ok and r.details == {"measured": 0, "produced": 0, "pending": 0}
     assert store.latest_outcome(action["id"])["status"] == "no_effect"
 
     # the customer deploys the fix → measured 0 → 1
@@ -44,7 +44,7 @@ def test_seo_fix_is_measured_by_recrawl(workspace, store, onboarded, monkeypatch
 
     # final outcomes are not re-recorded
     r = run_worker("measure", workspace, store, onboarded, None)
-    assert r.details == {"measured": 0, "pending": 0}
+    assert r.details == {"measured": 0, "produced": 0, "pending": 0}
 
     brief = build_brief(store)
     assert brief.summary["executed"] == 1 and brief.summary["measured"] == 1
@@ -101,7 +101,7 @@ def test_outreach_result_is_measured_by_reply(workspace, store, onboarded, monke
     store.set_action_status(action["id"], "executed")
 
     r = run_worker("measure", workspace, store, onboarded, None)
-    assert r.details == {"measured": 0, "pending": 1}
+    assert r.details == {"measured": 0, "produced": 0, "pending": 1}
     assert store.latest_outcome(action["id"])["note"].startswith("sent ")
 
     send = next(s for s in store.recent_sends() if s["to_email"] == "maria@brightsmile.example")
@@ -174,3 +174,138 @@ def test_homepage_signals_parse_real_markup():
     assert [f["kind"] for f in seo.signal_findings("https://s.example", sig)] == ["phone_not_tappable"]
     bare = seo.parse_signals("<html><body>Call 08 5550 0100</body></html>", "https://b.example/")
     assert [f["kind"] for f in seo.signal_findings("https://b.example", bare)] == ["phone_not_tappable", "no_local_schema", "no_canonical"]
+
+
+def test_homepage_signals_reject_digit_runs_that_are_not_phone_numbers():
+    """balenseskin.com.au reported '09-11-14-47-06' (a date-like run out of an image filename) and
+    littleloveco.net.au reported '0462806720515' (13 digits) alongside real phone numbers. Neither
+    is a phone number: the first is a slice of a longer separator-joined token, the second is simply
+    too many digits for a local number."""
+    embedded_date = seo.parse_signals(
+        '<html><body><img src="photo-2024-09-11-14-47-06.jpg" alt=""></body></html>', "https://balenseskin.example/")
+    assert embedded_date["phones"] == []
+    too_long = seo.parse_signals("<html><body>order ref 0462806720515 shipped</body></html>", "https://littleloveco.example/")
+    assert too_long["phones"] == []
+
+
+def test_homepage_signals_accept_real_phone_formats():
+    for number in ("0438 187 373", "(08) 8123 4567", "+61 8 8123 4567", "+44 20 7946 0958"):
+        sig = seo.parse_signals(f"<html><body>Call {number} for a booking</body></html>", "https://x.example/")
+        assert sig["phones"] == [number], (number, sig["phones"])
+
+
+# ── honesty defects: a deliverable is 'produced', not 'measured'; a local re-check is 'unmeasurable' ──
+def test_content_deliverable_with_no_publication_evidence_is_produced_not_measured(workspace, store, onboarded):
+    from revenueos.today import rank_next
+
+    aid = store.create_action("content_opportunity", "Write the rebooking guide", "why", context={"executor": "run_skill", "skill": "core/x"})
+    store.set_action_status(aid, "executed")
+    (workspace.outputs / f"blog-{aid}.md").write_text("# Rebooking guide\n\nbody")
+
+    r = run_worker("measure", workspace, store, onboarded, None)
+    assert r.details == {"measured": 0, "produced": 1, "pending": 0}
+    o = store.latest_outcome(aid)
+    assert o["status"] == "produced" and o["metric"] == "deliverable_produced"
+    assert "not published" in o["note"] and "connect the channel" in o["note"]
+
+    s = store.results_summary()
+    assert s["produced"] == 1 and s["measured"] == 0
+
+    # a second run is idempotent: no new outcome row, same result
+    with store._conn() as c:
+        outcomes_before = c.execute("SELECT COUNT(*) n FROM outcomes WHERE action_id=?", (aid,)).fetchone()["n"]
+    r2 = run_worker("measure", workspace, store, onboarded, None)
+    assert r2.details == {"measured": 0, "produced": 0, "pending": 0}  # nothing NEW to record
+    with store._conn() as c:
+        outcomes_after = c.execute("SELECT COUNT(*) n FROM outcomes WHERE action_id=?", (aid,)).fetchone()["n"]
+    assert outcomes_after == outcomes_before
+
+    # a produced outcome is not a win: rank_next's win rate stays at the no-history default
+    store.create_action("content_opportunity", "Write another guide", "why", context={"executor": "run_skill", "skill": "core/x"}, dedupe_key="c:2")
+    ranked = rank_next(store)
+    top = next(r for r in ranked if r["action_type"] == "content_opportunity")
+    assert top["win_rate"] == 0.0 and top["executed_of_type"] == 1  # the produced outcome did not count as a win
+
+    # and it does not start the pay-on-result clock
+    assert store.first_measured_at() is None
+    from revenueos import billing
+
+    decision = billing.pay_on_result(workspace, store)
+    assert decision["allowed"] is True and decision["first_result_at"] is None
+
+    # TODAY / RESULTS report it separately from "measured"
+    brief = build_brief(store)
+    text = brief.render_text("Acme")
+    assert "0 measured · 1 produced (not published)" in text
+
+
+def test_stale_deliverable_written_outcome_is_relabelled_produced_once(workspace, store, onboarded):
+    """A row recorded 'measured'/'deliverable_written' by the pre-fix measure_content (file existence
+    only) is corrected to 'produced' the next time measure runs, then stays stable."""
+    aid = store.create_action("content_opportunity", "Write the rebooking guide", "why", context={"executor": "run_skill", "skill": "core/x"})
+    store.set_action_status(aid, "executed")
+    (workspace.outputs / f"blog-{aid}.md").write_text("# Rebooking guide\n\nbody")
+    store.record_outcome(aid, "measured", metric="deliverable_written", before_value=0.0, after_value=1.0,
+                         after={"path": f"data/outputs/blog-{aid}.md"})
+    assert store.latest_outcome(aid)["status"] == "measured"
+
+    r = run_worker("measure", workspace, store, onboarded, None)
+    assert r.details == {"measured": 0, "produced": 1, "pending": 0}
+    o = store.latest_outcome(aid)
+    assert o["status"] == "produced" and o["metric"] == "deliverable_produced"
+
+    with store._conn() as c:
+        outcomes_before = c.execute("SELECT COUNT(*) n FROM outcomes WHERE action_id=?", (aid,)).fetchone()["n"]
+    r2 = run_worker("measure", workspace, store, onboarded, None)
+    assert r2.details == {"measured": 0, "produced": 0, "pending": 0}  # stable from here on
+    with store._conn() as c:
+        outcomes_after = c.execute("SELECT COUNT(*) n FROM outcomes WHERE action_id=?", (aid,)).fetchone()["n"]
+    assert outcomes_after == outcomes_before
+
+
+def test_stale_seo_measured_against_a_local_address_is_relabelled_unmeasurable_once(workspace, store, onboarded):
+    """A row recorded 'measured'/'sitemap_present' against a loopback URL before the local-host check
+    existed is corrected to 'unmeasurable' the next time measure runs, then stays stable."""
+    aid = store.create_action(
+        "seo_opportunity", "SEO: no sitemap — http://127.0.0.1:8795/site/", "why",
+        context={"kind": "no_sitemap", "executor": "run_skill", "skill": "seo/technical-seo-triage", "before": {}},
+        source_url="http://127.0.0.1:8795/site/",
+    )
+    store.set_action_status(aid, "executed")
+    store.record_outcome(aid, "measured", metric="sitemap_present", before_value=0.0, after_value=1.0)
+    assert store.latest_outcome(aid)["status"] == "measured"
+
+    r = run_worker("measure", workspace, store, onboarded, None)
+    assert r.details == {"measured": 0, "produced": 0, "pending": 0}
+    o = store.latest_outcome(aid)
+    assert o["status"] == "unmeasurable" and "127.0.0.1" in o["note"]
+
+    with store._conn() as c:
+        outcomes_before = c.execute("SELECT COUNT(*) n FROM outcomes WHERE action_id=?", (aid,)).fetchone()["n"]
+    run_worker("measure", workspace, store, onboarded, None)
+    with store._conn() as c:
+        outcomes_after = c.execute("SELECT COUNT(*) n FROM outcomes WHERE action_id=?", (aid,)).fetchone()["n"]
+    assert outcomes_after == outcomes_before  # stable from here on
+
+
+def test_seo_recheck_against_a_local_address_is_unmeasurable(workspace, store, onboarded):
+    aid = store.create_action(
+        "seo_opportunity", "SEO: no sitemap — http://127.0.0.1:8795/site/", "why",
+        context={"kind": "no_sitemap", "executor": "run_skill", "skill": "seo/technical-seo-triage", "before": {}},
+        source_url="http://127.0.0.1:8795/site/",
+    )
+    store.set_action_status(aid, "executed")
+
+    r = run_worker("measure", workspace, store, onboarded, None)
+    assert r.details == {"measured": 0, "produced": 0, "pending": 0}
+    o = store.latest_outcome(aid)
+    assert o["status"] == "unmeasurable"
+    assert "127.0.0.1" in o["note"] and "not the live site" in o["note"] and "revenueos.yaml" in o["note"]
+
+    # localhost / .local / RFC1918 are all caught; a public host is not
+    assert measure.local_host("http://127.0.0.1:8795/site/") == "127.0.0.1"
+    assert measure.local_host("http://localhost:8080/") == "localhost"
+    assert measure.local_host("http://my-box.local/") == "my-box.local"
+    assert measure.local_host("http://192.168.1.20/") == "192.168.1.20"
+    assert measure.local_host("http://10.0.0.5/") == "10.0.0.5"
+    assert measure.local_host("https://acme-scheduling.example/") is None

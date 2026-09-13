@@ -36,6 +36,8 @@ QUESTIONS: list[tuple[str, str, tuple[str, str] | None]] = [
     ("sender_name", "Name that outreach is sent from", None),
     ("sender_email", "Email address outreach is sent from", None),
     ("booking_url", "Booking / demo link (optional)", None),
+    # no canon target: the objective is machine state (store: objectives), not a company-context file
+    ("objective", "What is the one revenue objective for the next 90 days?", None),
 ]
 
 PLACEHOLDER_MANIFEST_NAME = "Your Company"
@@ -128,6 +130,11 @@ class BusinessContext:
         corrections = self.recent_corrections()
         if corrections:
             text += "\n\n<corrections>\n" + corrections + "\n</corrections>"
+        from .learning import recent_lessons  # local: learning imports roles, which imports this module
+
+        lessons = recent_lessons(self.ws)
+        if lessons:
+            text += "\n\n<lessons>\n" + lessons + "\n</lessons>"
         return text[:max_chars]
 
     def recent_corrections(self, days: int = 30, max_chars: int = 2500) -> str:

@@ -22,11 +22,18 @@ from typing import Any
 from ..context import BusinessContext
 from ..llm import LLM
 from ..paths import Workspace
-from ..store import Store
+from ..store import Store, now
 from ..vendor.sales_agent.models import EmailDraft, Lead
 from ..vendor.sales_agent.recipes import Hook, Recipe
 from ..vendor.sales_agent.render import render_cold_text
 from . import WorkerResult
+
+# Bound into this module's namespace (not just imported for local use) so a test can
+# monkeypatch `revenueos.workers.outreach.homepage_signals` independently of seo's own copy:
+# a draft's factual claim ("phone shown but not tappable", "no LocalBusiness schema") is
+# re-checked against the live homepage right before drafting and right before sending —
+# a claim observed at discover time can go stale by the time a human approves it.
+from .seo import homepage_signals  # noqa: F401
 
 MODEL_TEMPLATE = "template-v2"
 
@@ -92,6 +99,37 @@ def observation(lead: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
+# Kinds `phone` and `schema` assert a fact about the live homepage; that fact is checked
+# again — once before drafting, once again right before send — because a site can change
+# (or the fetch that produced the discover-time `reason` can simply have been wrong) in
+# the time between discovery and a human approving the draft. `note` is a human-written
+# qualification note (e.g. "3-chair clinic, posts about no-shows") and is not a claim about
+# the live page, so it is never re-checked.
+CLAIM_TEXT = {
+    "phone": "the phone number is shown as plain text, not a tappable tel: link",
+    "schema": "the page carries no LocalBusiness schema markup",
+}
+
+
+def _claim_holds(kind: str, signals: dict[str, Any]) -> bool:
+    """Does today's homepage_signals() still support the claim named by `kind`?"""
+    if kind == "phone":
+        return bool(signals.get("phones")) and not signals.get("tel_link")
+    if kind == "schema":
+        return not signals.get("local_schema")
+    return True
+
+
+def _observed_now(kind: str, signals: dict[str, Any]) -> str:
+    """What today's read actually shows, for the withdrawal message — only called when
+    `_claim_holds` is False, i.e. the draft's claim no longer matches the live page."""
+    if kind == "phone":
+        return "no phone number at all on the page" if not signals.get("phones") else "the phone number is now a tappable tel: link"
+    if kind == "schema":
+        return "the page now carries LocalBusiness schema"
+    return "the page no longer matches the draft's claim"
+
+
 def build_recipe(ctx: BusinessContext) -> Recipe:
     """One hook, written for the owner of a small business. The opener is filled per lead from what was
     observed on their site; nothing in the body comes from an unfilled canon section."""
@@ -133,7 +171,7 @@ def signature(ctx: BusinessContext) -> str:
     return "\n".join(lines)
 
 
-def draft_for(lead: dict[str, Any], recipe: Recipe, llm: LLM | None, ctx: BusinessContext) -> tuple[str, str, str, str]:
+def draft_for(lead: dict[str, Any], recipe: Recipe, llm: LLM | None, ctx: BusinessContext) -> tuple[str, str, str, str, str]:
     """Deterministic: no LLM in the body. Raises DraftRejected when there is nothing observed to say."""
     hook = recipe.hooks[pick(lead["id"], len(recipe.hooks), "hook")]
     shop = _clean(lead.get("business_name") or "")
@@ -150,7 +188,7 @@ def draft_for(lead: dict[str, Any], recipe: Recipe, llm: LLM | None, ctx: Busine
     opener = hook.opener.format(shop_name=shop, first_name=greeting_name, observation=obs)
     body = f"{opener}\n\n{hook.body.format(shop_name=shop)}\n\n{signature(ctx)}"
     lint_draft(subject, body)
-    return hook.name, subject_tpl, subject, body
+    return hook.name, subject_tpl, subject, body, kind
 
 
 class OutreachWorker:
@@ -163,7 +201,7 @@ class OutreachWorker:
             return WorkerResult(ok=False, summary="", error="not onboarded — run `revenueos init` first")
         recipe = build_recipe(ctx)
         limit = int((ctx.config.get("outreach") or {}).get("drafts_per_run", 10))
-        created, skipped = 0, 0
+        created, skipped, stale = 0, 0, 0
         rejected: list[str] = []
         # only leads the gate qualified ('scored'); 'new' means found-but-not-qualified
         candidates = [l for l in store.list_leads() if l["status"] == "scored" and (l.get("contact_email") or "").strip()]
@@ -172,21 +210,33 @@ class OutreachWorker:
             if not email or store.is_unsubscribed(email):
                 skipped += 1
                 continue
+            found = observation(lead)
+            site = (lead.get("website_url") or "").strip()
+            if found and found[0] in ("phone", "schema"):
+                # re-check the claim against the live homepage before drafting: the discover-time
+                # `reason` can already be stale, or simply wrong, by the time this worker runs.
+                signals = homepage_signals(site) if site else {"ok": False}
+                if not signals.get("ok") or not _claim_holds(found[0], signals):
+                    stale += 1
+                    continue
             try:
-                hook_name, variant, subject, body = draft_for(lead, recipe, llm, ctx)
+                hook_name, variant, subject, body, kind = draft_for(lead, recipe, llm, ctx)
             except DraftRejected as e:
                 rejected.append(f"{lead.get('business_name')}: {e}")
                 continue
             draft_id = store.create_draft(lead["id"], f"{recipe.key}/{hook_name}", variant, subject, body, MODEL_TEMPLATE)
+            context: dict[str, Any] = {"executor": "send_email", "draft_id": draft_id, "lead_id": lead["id"], "to": email, "hook": hook_name, "kind": kind}
+            if kind in ("phone", "schema"):
+                context.update({"site": site, "claim": CLAIM_TEXT.get(kind, ""), "claim_verified_at": now()})
             aid = store.create_action(
                 "follow_up", f"Send to {email} — {subject}", body,
                 run_id=run_id, dedupe_key=f"draft:{draft_id}",
-                context={"executor": "send_email", "draft_id": draft_id, "lead_id": lead["id"], "to": email, "hook": hook_name},
+                context=context,
             )
             created += 1 if aid else 0
         return WorkerResult(ok=True, summary=f"{created} email draft(s) waiting for your approval; {skipped} lead(s) skipped (no email or unsubscribed); "
-                                              f"{len(rejected)} draft(s) refused by the lint.",
-                            actions_created=created, details={"candidates": len(candidates), "skipped": skipped, "rejected": rejected})
+                                              f"{len(rejected)} draft(s) refused by the lint; {stale} skipped (claim no longer observed).",
+                            actions_created=created, details={"candidates": len(candidates), "skipped": skipped, "rejected": rejected, "stale": stale})
 
 
 # ── execution (only after approval) ───────────────────────────────────────────
@@ -231,6 +281,27 @@ def execute_send(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | N
         return f"not sent: {to_email} is on the suppression list"
     if store.daily_send_count() >= cap:
         return f"not sent: daily cap of {cap} reached; try again tomorrow"
+    kind = c.get("kind")
+    if kind in ("phone", "schema"):
+        # The draft's one claim about the live site is re-checked right before it can send:
+        # a claim recorded at discover time (or even at draft time) can already be stale.
+        site = c.get("site") or (lead.website_url or "")
+        signals = homepage_signals(site) if site else {"ok": False}
+        if not signals.get("ok"):
+            return f"not sent: could not re-check {site} today (fetch failed); try again later"
+        if not _claim_holds(kind, signals):
+            claim = c.get("claim") or CLAIM_TEXT.get(kind, "the claim")
+            observed = _observed_now(kind, signals)
+            # email_drafts.approval_state has no 'withdrawn' value in its CHECK constraint (vendored
+            # schema: pending/approved/rejected/edited/superseded); 'rejected' is the existing state
+            # for "this draft is no longer valid" (the qualification gate uses it the same way when
+            # a lead is disqualified after a draft already exists) — the word "withdrawn" below is
+            # only the human-facing message text.
+            store.set_draft_approval(c["draft_id"], "rejected", by="freshness-check")
+            store.set_action_status(action["id"], "ignored")
+            store.update_action_context(action["id"], claim_recheck_failed_at=now(), claim_recheck_observed=observed)
+            return f"not sent: the draft says {claim} but today's read of {site} shows {observed}; draft withdrawn"
+        store.update_action_context(action["id"], claim_verified_at=now(), claim=c.get("claim") or CLAIM_TEXT.get(kind, ""))
     d = store.get_draft(c["draft_id"]) or {}
     if d.get("approval_state") not in ("approved", "edited"):
         store.set_draft_approval(c["draft_id"], "approved")

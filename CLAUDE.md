@@ -15,8 +15,12 @@ uv run ruff check src tests               # lint (vendored code excluded)
 cd orchestrator && npm install && npm test && npm run typecheck   # vitest + tsc; one file: npx vitest run tests/worker.test.ts
 uv run revenueos workspace new <dir>      # a fresh customer workspace sharing this install's catalogue; then --root <dir> or REVENUEOS_ROOT
 uv run revenueos init --answers a.json    # onboarding (keys: QUESTIONS in src/revenueos/context.py); interactive without --answers
-uv run revenueos run <worker|all> [--json] [--no-llm]   # workers: discover outreach inbox seo ads-audit content monitor measure
-uv run revenueos today | results | approve <id> | execute <id> | ignore <id> | doctor | skills search <q> | tools
+uv run revenueos run <worker|all> [--json] [--no-llm]   # workers: discover outreach inbox seo ads-audit ads-live analytics billing content monitor measure growth heartbeat
+uv run revenueos today | next | results | approve <id> | execute <id> | ignore <id> | doctor | skills search <q> | tools
+uv run revenueos objective add "<title>" [--strategy ..] | list | show <id> | note <id> --kind .. "..." | pause|resume|done <id>
+uv run revenueos messages [--unread] [--mark-read]       # what the heartbeat needs a human for
+uv run revenueos agent run <role> "<task>" [--json]      # roles: research marketing sales measurement (specs in learning-loop/roles/)
+uv run revenueos learn | lessons | refine <role> --evidence .. --change .. | refine <role> --rollback
 uv run revenueos serve [--host 0.0.0.0 --port 8791]     # control panel; non-loopback needs REVENUEOS_PANEL_PASSWORD
 uv run revenueos orchestrator [--once <automation>]      # the always-on worker loop over data/automations.json; continuous mode needs a Pro licence
 uv run revenueos license show|install <key>|issue ...    # licence (vendor issues with REVENUEOS_LICENSE_SECRET)
@@ -99,7 +103,9 @@ last stdout line.
 
 **Where each worker's substance comes from:** see `NOTICE.md` for the specific upstream
 project behind each worker's vendored core; in brief — `ads-audit` runs adapters/scoring/
-reporting over `data/exports/ads-<platform>.csv` (a 13-column generic export format);
+reporting over `data/exports/ads-<platform>.csv` (a 13-column generic export format), with
+Google's keyword and search-term downloads read as `ads-<platform>.keywords.csv` /
+`ads-<platform>.search-terms.csv` beside it (`ads-live` reads the same from a connected account);
 `monitor` runs a Hacker News search plus a default-reject relevance gate built from a
 business "brain" derived from the canon; `seo` runs a site crawl, a domain-authority
 comparison, and an optional local project probe, each finding pointing at a matching SEO
@@ -109,6 +115,8 @@ stripping over IMAP or dropped `.eml` files; `discover` reads an external lead-g
 service's JSON output (process boundary) or CSV drops; `content` matches the registry to
 `ctx.channels`; `measure` re-crawls (seo), reads send rows (outreach), reads the next
 export (ads), or checks deliverable presence (content).
+
+**Objectives, heartbeat, roles, lessons.** `store.py` holds `objectives`, `objective_events`, `messages` and `agent_runs`. `workers/heartbeat.py` (scheduled every 30 minutes) is deterministic and works without a model: it reads what is pending, approved but not run, measured, failed and blocked, writes one dated event per run on each active objective, sets the next action from `today.rank_next`, and messages the operator only when a human is needed. `roles.py` runs a role spec (`learning-loop/roles/<role>.md`) through `llm.py` with a JSON output contract, records every attempt in `agent_runs`, recurses at most two levels, and may only propose pending actions. `learning.py` turns every measured outcome into a dated lesson in `learning-loop/LESSONS.md` (injected into prompts by `ctx.prompt_summary()`) and refines role specs with snapshots and rollback; `## Purpose` in a spec is immutable.
 
 **Orchestrator.** `orchestrator/src/worker/index.ts` runs a tick loop; `runner.ts` spawns
 the CLI (`REVENUEOS_BIN` overrides). Schedule: `data/automations.json`. The status API on

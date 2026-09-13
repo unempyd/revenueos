@@ -1,5 +1,6 @@
 """Google: Search Console (queries and pages), GA4 (sessions, conversions), Calendar (book the call) and
-Google Ads (campaigns, pause, budget). One OAuth connection; each API is a scope the owner granted.
+Google Ads (campaigns, keywords, search terms, negative keywords; pause, budget). One OAuth connection; each
+API is a scope the owner granted.
 
 Live use needs an OAuth client (GOOGLE_OAUTH_CLIENT_ID / _SECRET) that the owner registers once in the
 Google Cloud console, and for Google Ads a developer token (GOOGLE_ADS_DEVELOPER_TOKEN) plus the customer
@@ -26,7 +27,7 @@ ADS = "https://googleads.googleapis.com/v18"
 def describe() -> dict[str, Any]:
     return {
         "label": "Google (Search Console, GA4, Calendar, Google Ads)",
-        "reads": "search queries and pages (Search Console), sessions and conversions (GA4), campaigns and spend (Google Ads)",
+        "reads": "search queries and pages (Search Console), sessions and conversions (GA4), campaigns, keywords, search terms and negative keywords (Google Ads)",
         "writes": "book a call on your calendar; pause a campaign or change its daily budget (needs 'allow changes')",
         "needs": "an OAuth client (GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET); Google Ads also needs GOOGLE_ADS_DEVELOPER_TOKEN and GOOGLE_ADS_CUSTOMER_ID",
         "how": "revenueos connect google  (opens the consent page in your browser)",
@@ -156,29 +157,117 @@ def _ads_headers(store: ConnectionStore, conn: Connection, client: httpx.Client 
     return h
 
 
-def ads_campaigns(store: ConnectionStore, customer_id: str | None = None, days: int = 28, client: httpx.Client | None = None) -> list[dict[str, Any]]:
+def _customer(store: ConnectionStore, customer_id: str | None) -> tuple[Connection, str]:
     conn = require(store, NAME)
     cid = (customer_id or conn.meta.get("ads_customer_id") or "").replace("-", "")
     if not cid:
         raise PermissionDenied("no Google Ads customer id (GOOGLE_ADS_CUSTOMER_ID)")
+    return conn, cid
+
+
+def _search(store: ConnectionStore, conn: Connection, cid: str, query: str, client: httpx.Client | None, what: str) -> list[dict[str, Any]]:
+    """One GAQL query through googleAds:searchStream, the batches flattened into rows."""
     c = client or httpx.Client(timeout=60)
+    r = c.post(f"{ADS}/customers/{cid}/googleAds:searchStream", json={"query": query}, headers=_ads_headers(store, conn, client))
+    if r.status_code != 200:
+        raise RuntimeError(f"Google Ads {what}: {r.status_code} {r.text[:200]}")
+    body = r.json()
+    return [row for batch in (body if isinstance(body, list) else [body]) for row in batch.get("results", [])]
+
+
+def ads_campaigns(store: ConnectionStore, customer_id: str | None = None, days: int = 28, client: httpx.Client | None = None) -> list[dict[str, Any]]:
+    conn, cid = _customer(store, customer_id)
     q = (f"SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, metrics.cost_micros, "
          f"metrics.conversions, metrics.clicks, metrics.impressions FROM campaign WHERE segments.date DURING LAST_{days}_DAYS "
          "AND campaign.status != 'REMOVED'")
-    r = c.post(f"{ADS}/customers/{cid}/googleAds:searchStream", json={"query": q}, headers=_ads_headers(store, conn, client))
-    if r.status_code != 200:
-        raise RuntimeError(f"Google Ads: {r.status_code} {r.text[:200]}")
     out: dict[str, dict[str, Any]] = {}
-    for batch in r.json() if isinstance(r.json(), list) else [r.json()]:
-        for row in batch.get("results", []):
-            camp, m, b = row.get("campaign", {}), row.get("metrics", {}), row.get("campaignBudget", {})
-            rec = out.setdefault(str(camp.get("id")), {"id": str(camp.get("id")), "name": camp.get("name"), "status": camp.get("status"),
-                                                        "daily_budget": float(b.get("amountMicros") or 0) / 1e6, "cost": 0.0, "conversions": 0.0, "clicks": 0, "impressions": 0})
-            rec["cost"] += float(m.get("costMicros") or 0) / 1e6
-            rec["conversions"] += float(m.get("conversions") or 0)
-            rec["clicks"] += int(m.get("clicks") or 0)
-            rec["impressions"] += int(m.get("impressions") or 0)
+    for row in _search(store, conn, cid, q, client, "campaigns"):
+        camp, m, b = row.get("campaign", {}), row.get("metrics", {}), row.get("campaignBudget", {})
+        rec = out.setdefault(str(camp.get("id")), {"id": str(camp.get("id")), "name": camp.get("name"), "status": camp.get("status"),
+                                                    "daily_budget": float(b.get("amountMicros") or 0) / 1e6, "cost": 0.0, "conversions": 0.0, "clicks": 0, "impressions": 0})
+        rec["cost"] += float(m.get("costMicros") or 0) / 1e6
+        rec["conversions"] += float(m.get("conversions") or 0)
+        rec["clicks"] += int(m.get("clicks") or 0)
+        rec["impressions"] += int(m.get("impressions") or 0)
     return list(out.values())
+
+
+_MATCH = {"EXACT": "exact", "PHRASE": "phrase", "BROAD": "broad"}
+_TERM_STATUS = {"ADDED": "added", "EXCLUDED": "excluded", "ADDED_EXCLUDED": "added_excluded", "NONE": "none"}
+
+
+def ads_keywords(store: ConnectionStore, customer_id: str | None = None, days: int = 28, client: httpx.Client | None = None) -> list[dict[str, Any]]:
+    """Every live search keyword with its match type, status, quality score and window metrics (keyword_view)."""
+    conn, cid = _customer(store, customer_id)
+    q = ("SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, ad_group_criterion.criterion_id, ad_group_criterion.keyword.text, "
+         "ad_group_criterion.keyword.match_type, ad_group_criterion.status, ad_group_criterion.quality_info.quality_score, "
+         f"metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions FROM keyword_view WHERE segments.date DURING LAST_{days}_DAYS "
+         "AND ad_group_criterion.status != 'REMOVED'")
+    out: dict[str, dict[str, Any]] = {}
+    for row in _search(store, conn, cid, q, client, "keywords"):
+        crit, m = row.get("adGroupCriterion", {}), row.get("metrics", {})
+        kw = crit.get("keyword", {})
+        key = str(crit.get("criterionId") or f"{row.get('adGroup', {}).get('id')}:{kw.get('text')}")
+        rec = out.setdefault(key, {"keyword_id": key, "text": kw.get("text"), "match_type": _MATCH.get(kw.get("matchType", ""), str(kw.get("matchType", "")).lower() or "unknown"),
+                                   "status": str(crit.get("status") or "").lower() or "unknown",
+                                   "quality_score": (crit.get("qualityInfo") or {}).get("qualityScore"),
+                                   "campaign_id": str(row.get("campaign", {}).get("id")), "campaign_name": row.get("campaign", {}).get("name"),
+                                   "ad_group_id": str(row.get("adGroup", {}).get("id")), "ad_group_name": row.get("adGroup", {}).get("name"),
+                                   "cost": 0.0, "clicks": 0, "impressions": 0, "conversions": 0.0})
+        rec["cost"] += float(m.get("costMicros") or 0) / 1e6
+        rec["clicks"] += int(m.get("clicks") or 0)
+        rec["impressions"] += int(m.get("impressions") or 0)
+        rec["conversions"] += float(m.get("conversions") or 0)
+    for rec in out.values():
+        rec["cost"] = round(rec["cost"], 2)
+    return list(out.values())
+
+
+def ads_search_terms(store: ConnectionStore, customer_id: str | None = None, days: int = 28, client: httpx.Client | None = None) -> list[dict[str, Any]]:
+    """What people actually typed (search_term_view): term, match type that triggered it, whether it was added or excluded, metrics."""
+    conn, cid = _customer(store, customer_id)
+    q = ("SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, search_term_view.search_term, search_term_view.status, "
+         "segments.search_term_match_type, metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions "
+         f"FROM search_term_view WHERE segments.date DURING LAST_{days}_DAYS")
+    out: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in _search(store, conn, cid, q, client, "search terms"):
+        v, m, seg = row.get("searchTermView", {}), row.get("metrics", {}), row.get("segments", {})
+        match = _MATCH.get(str(seg.get("searchTermMatchType", "")).split("_")[0], str(seg.get("searchTermMatchType", "")).lower() or "unknown")
+        key = (str(v.get("searchTerm")), str(row.get("adGroup", {}).get("id")), match)
+        rec = out.setdefault(key, {"text": v.get("searchTerm"), "match_type": match, "status": _TERM_STATUS.get(str(v.get("status", "")), "none"),
+                                   "campaign_id": str(row.get("campaign", {}).get("id")), "campaign_name": row.get("campaign", {}).get("name"),
+                                   "ad_group_id": str(row.get("adGroup", {}).get("id")), "ad_group_name": row.get("adGroup", {}).get("name"),
+                                   "cost": 0.0, "clicks": 0, "impressions": 0, "conversions": 0.0})
+        rec["cost"] += float(m.get("costMicros") or 0) / 1e6
+        rec["clicks"] += int(m.get("clicks") or 0)
+        rec["impressions"] += int(m.get("impressions") or 0)
+        rec["conversions"] += float(m.get("conversions") or 0)
+    for rec in out.values():
+        rec["cost"] = round(rec["cost"], 2)
+    return list(out.values())
+
+
+def ads_negative_keywords(store: ConnectionStore, customer_id: str | None = None, client: httpx.Client | None = None) -> dict[str, Any]:
+    """Campaign-level negatives, the enabled negative-keyword lists with their keywords, and which campaigns each list is attached to.
+    A list attached to every campaign is what 'account-level negatives' means in practice."""
+    conn, cid = _customer(store, customer_id)
+    campaign = [{"text": r["campaignCriterion"]["keyword"].get("text"), "match_type": _MATCH.get(r["campaignCriterion"]["keyword"].get("matchType", ""), "unknown"),
+                 "campaign_id": str(r.get("campaign", {}).get("id")), "campaign_name": r.get("campaign", {}).get("name")}
+                for r in _search(store, conn, cid, "SELECT campaign.id, campaign.name, campaign_criterion.criterion_id, campaign_criterion.keyword.text, "
+                                 "campaign_criterion.keyword.match_type FROM campaign_criterion WHERE campaign_criterion.negative = TRUE "
+                                 "AND campaign_criterion.type = 'KEYWORD' AND campaign.status != 'REMOVED'", client, "campaign negatives")
+                if r.get("campaignCriterion", {}).get("keyword")]
+    lists: dict[str, dict[str, Any]] = {}
+    for r in _search(store, conn, cid, "SELECT shared_set.id, shared_set.name, shared_criterion.keyword.text, shared_criterion.keyword.match_type "
+                     "FROM shared_criterion WHERE shared_set.type = 'NEGATIVE_KEYWORDS' AND shared_set.status = 'ENABLED'", client, "negative lists"):
+        ss, kw = r.get("sharedSet", {}), r.get("sharedCriterion", {}).get("keyword", {})
+        lst = lists.setdefault(str(ss.get("id")), {"list_id": str(ss.get("id")), "name": ss.get("name"), "keywords": []})
+        if kw.get("text"):
+            lst["keywords"].append({"text": kw.get("text"), "match_type": _MATCH.get(kw.get("matchType", ""), "unknown")})
+    attachments = [{"list_id": str(r.get("sharedSet", {}).get("id")), "campaign_id": str(r.get("campaign", {}).get("id"))}
+                   for r in _search(store, conn, cid, "SELECT campaign.id, shared_set.id, shared_set.name FROM campaign_shared_set "
+                                    "WHERE shared_set.type = 'NEGATIVE_KEYWORDS' AND campaign_shared_set.status = 'ENABLED'", client, "list attachments")]
+    return {"campaign": campaign, "lists": list(lists.values()), "list_campaigns": attachments}
 
 
 def ads_waste(campaigns: list[dict[str, Any]], min_cost: float = 50.0) -> list[dict[str, Any]]:

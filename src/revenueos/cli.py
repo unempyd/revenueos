@@ -25,7 +25,7 @@ from .paths import Workspace, is_workspace
 from .registry import build_registry, load_registry, search_skills
 from .store import Store
 from .today import build_brief
-from .workers import all_workers, execute_action, run_worker
+from .workers import all_workers, execute_action, refused, run_worker
 
 
 def _boot(args: argparse.Namespace) -> tuple[Workspace, Store, BusinessContext]:
@@ -40,7 +40,7 @@ def _boot(args: argparse.Namespace) -> tuple[Workspace, Store, BusinessContext]:
 
 # ── commands ────────────────────────────────────────────────────────────────
 def cmd_init(args: argparse.Namespace) -> int:
-    ws, _store, ctx = _boot(args)
+    ws, store, ctx = _boot(args)
     answers: dict[str, str] = {}
     if getattr(args, "from_url", None):
         from .onboard import derive_answers
@@ -67,6 +67,11 @@ def cmd_init(args: argparse.Namespace) -> int:
     ctx.onboard(answers)
     errors = ctx.validate()
     build_registry(ws)
+    if answers.get("objective"):
+        from .objectives import ensure_objective
+
+        oid = ensure_objective(store, answers["objective"])
+        print(f"Objective [{oid}] set: {answers['objective']}" if oid else "Objective already set (unchanged).")
     print(f"Onboarded {ctx.company_name}. Config: {ws.config.relative_to(ws.root)}; canon: company-context/.")
     if errors:
         print("company-context validation:", *errors, sep="\n  ")
@@ -129,7 +134,9 @@ def cmd_today(args: argparse.Namespace) -> int:
     _ws, store, ctx = _boot(args)
     brief = build_brief(store)
     if args.json:
-        print(json.dumps({"counts": brief.counts, "funnel": brief.funnel, "pipeline_value": brief.pipeline_value, "actions": brief.actions, "approved": brief.approved, "metrics": brief.metrics}, indent=2, default=str))
+        print(json.dumps({"objective": brief.objective, "counts": brief.counts, "funnel": brief.funnel, "pipeline_value": brief.pipeline_value,
+                          "actions": brief.actions, "approved": brief.approved, "metrics": brief.metrics, "messages": brief.messages},
+                         indent=2, default=str))
     else:
         print(brief.render_text(ctx.company_name))
     return 0
@@ -173,6 +180,9 @@ def _decide(args: argparse.Namespace, verb: str) -> int:
     llm = maybe_llm()
     try:
         outcome = execute_action(ws, store, ctx, llm, action)
+        if refused(outcome):
+            print(f"not executed [{args.id}] {action['title']}\n  {outcome}")
+            return 1
         store.set_action_status(args.id, "executed")
         print(f"executed [{args.id}] {action['title']}\n  {outcome}")
         return 0
@@ -250,7 +260,7 @@ def cmd_results(args: argparse.Namespace) -> int:
         return 0
     s = brief.summary
     print(f"RESULTS — {ctx.company_name}\n")
-    print(f"{s['found']} opportunities found · {s['executed']} executed · {s['measured']} measured")
+    print(f"actions: {s['found']} found · {s['executed']} executed · {s['measured']} measured · {s.get('produced', 0)} produced (not published)")
     print(f"{s['emails_sent']} emails sent · {s['replies']} replies · {s['bounces']} bounces · {s['booked']} booked · ${s['pipeline_value']:,.0f} pipeline\n")
     for line in brief.result_lines(limit=100):
         print(line)
@@ -402,6 +412,246 @@ def cmd_accounts(args: argparse.Namespace) -> int:
     return 0
 
 
+def _objective_args(args: argparse.Namespace) -> int:
+    """`objective add "<title>"` / `objective show <id>` share one positional; split it here so
+    cmd_objective can be called directly from tests with a plain namespace."""
+    args.title = args.target if args.verb == "add" else None
+    args.id = None
+    if args.verb not in ("add", "list"):
+        try:
+            args.id = int(args.target) if args.target is not None else None
+        except ValueError:
+            print(f"not an objective id: {args.target!r}", file=sys.stderr)
+            return 2
+    return cmd_objective(args)
+
+
+def cmd_objective(args: argparse.Namespace) -> int:
+    """The one thing the business is trying to achieve, and the trail of what happened towards it."""
+    from .objectives import HOW_TO_ADD, ensure_objective
+    from .store import OBJECTIVE_EVENT_KINDS
+
+    _ws, store, _ctx = _boot(args)
+    verb = args.verb
+    if verb == "add":
+        oid = ensure_objective(store, args.title or "", strategy=args.strategy)
+        if oid is None:
+            print("an active objective with that title already exists", file=sys.stderr)
+            return 1
+        print(f"objective [{oid}] {args.title}")
+        return 0
+    if verb == "list":
+        rows = store.list_objectives()
+        if not rows:
+            print(HOW_TO_ADD)
+            return 0
+        for o in rows:
+            hb = store.latest_heartbeat(o["id"])
+            print(f"[{o['id']:>3}] {o['status']:<7} {o['title']}")
+            if o.get("next_action"):
+                print(f"        next: {o['next_action']}")
+            if hb:
+                print(f"        heartbeat {hb['ts'][:16].replace('T', ' ')}: {hb['text'][:120]}")
+        return 0
+    if args.id is None:
+        print(f"revenueos objective {verb} <id>", file=sys.stderr)
+        return 2
+    o = store.get_objective(args.id)
+    if not o:
+        print(f"no objective {args.id}", file=sys.stderr)
+        return 2
+    if verb == "show":
+        print(f"[{o['id']}] {o['title']}  ({o['status']})")
+        print(f"strategy: {o.get('strategy') or '— not set —'}")
+        print(f"next:     {o.get('next_action') or '— the heartbeat sets this —'}\n")
+        events = store.list_objective_events(o["id"], limit=15)
+        if not events:
+            print("no events yet. `revenueos run heartbeat` writes the first one.")
+        for e in events:
+            print(f"{e['ts'][:16].replace('T', ' ')}  {e['kind']:<9} {e['text']}")
+        return 0
+    if verb in ("pause", "resume", "done"):
+        store.set_objective_status(o["id"], {"pause": "paused", "resume": "active", "done": "done"}[verb])
+        print(f"objective [{o['id']}] is now {store.get_objective(o['id'])['status']}")
+        return 0
+    if verb == "set":
+        if args.strategy is None and args.next is None:
+            print("nothing to set: pass --strategy and/or --next", file=sys.stderr)
+            return 2
+        store.update_objective(o["id"], strategy=args.strategy, next_action=args.next)
+        print(f"objective [{o['id']}] updated")
+        return 0
+    if verb == "note":
+        if args.kind not in OBJECTIVE_EVENT_KINDS or args.kind == "heartbeat":
+            print(f"--kind must be one of {', '.join(k for k in OBJECTIVE_EVENT_KINDS if k != 'heartbeat')}", file=sys.stderr)
+            return 2
+        if not args.text:
+            print("nothing to record: pass the note text", file=sys.stderr)
+            return 2
+        store.add_objective_event(o["id"], args.kind, args.text, {"source": "cli"})
+        print(f"recorded {args.kind} on objective [{o['id']}]")
+        return 0
+    return 2
+
+
+def cmd_messages(args: argparse.Namespace) -> int:
+    """What RevenueOS has to say to a human, and nothing else."""
+    _ws, store, _ctx = _boot(args)
+    rows = store.list_messages(args.to, unread_only=args.unread, limit=args.limit)
+    if args.json:
+        print(json.dumps(rows, indent=2, default=str))
+        return 0
+    if not rows:
+        print("no messages" + (" unread" if args.unread else ""))
+        return 0
+    for m in rows:
+        mark = " " if m.get("read_at") else "•"
+        print(f"{mark} [{m['id']:>3}] {m['ts'][:16].replace('T', ' ')}  {m['from_agent']} → {m['to_agent']}: {m['subject']}")
+        for line in (m.get("body") or "").strip().splitlines():
+            print(f"        {line}")
+    if args.mark_read:
+        for m in rows:
+            store.mark_read(m["id"])
+        print(f"\nmarked {len(rows)} message(s) read")
+    return 0
+
+
+def _render_role_result(result, indent: str = "") -> None:
+    mark = "ok  " if result.ok else "FAIL"
+    print(f"{indent}{mark} {result.role} #{result.run_id if result.run_id is not None else '-'}")
+    if not result.ok:
+        print(f"{indent}     {result.error}")
+        if result.raw:
+            print(f"{indent}     raw: {result.raw.strip()[:300]}")
+        return
+    out = result.output or {}
+    print(f"{indent}     {out.get('summary', '').strip()}")
+    for f in (out.get("findings") or [])[:12]:
+        if isinstance(f, dict):
+            ev = f.get("evidence")
+            ev = "; ".join(str(x) for x in ev) if isinstance(ev, list) else str(ev or "")
+            print(f"{indent}     • {str(f.get('claim', '')).strip()}   [{ev.strip()}]")
+    for c in (out.get("cannot_determine") or [])[:6]:
+        print(f"{indent}     ? cannot determine: {c}")
+    for s in out.get("skipped_proposals") or []:
+        print(f"{indent}     – proposal skipped: {s}")
+    if result.proposed_action_ids:
+        ids = ", ".join(str(i) for i in result.proposed_action_ids)
+        print(f"{indent}     proposed {len(result.proposed_action_ids)} action(s) [{ids}] — they wait for approval in `revenueos today`")
+    for sub in result.subresults:
+        _render_role_result(sub, indent + "    ")
+
+
+def cmd_agent(args: argparse.Namespace) -> int:
+    """Roles — specialised subagents (research, marketing, sales, measurement) that can call each
+    other. They propose actions; only Execute ever acts."""
+    from .roles import ROLES, run_role
+
+    ws, store, ctx = _boot(args)
+    rest = list(args.rest)
+    if args.sub == "run":
+        if len(rest) < 2:
+            print('usage: revenueos agent run <role> "<task>"', file=sys.stderr)
+            return 2
+        role, task = rest[0], " ".join(rest[1:])
+        if role not in ROLES:
+            print(f"unknown role {role!r}; known: {', '.join(ROLES)}", file=sys.stderr)
+            return 2
+        result = run_role(role, task, ws, store, ctx, None if args.no_llm else maybe_llm())
+        if args.json:
+            print(json.dumps(result.as_json(), indent=2, default=str))
+        else:
+            _render_role_result(result)
+        return 0 if result.ok else 1
+    if args.sub == "runs":
+        rows = store.list_agent_runs(role=args.role, limit=args.limit)
+        if args.json:
+            print(json.dumps(rows, indent=2, default=str))
+            return 0
+        for r in rows:
+            depth = "  " * int(r["depth"] or 0)
+            print(f"[{r['id']:>4}] {'ok  ' if r['ok'] else 'FAIL'} {r['started_at']}  {depth}{r['role']:<12} {r['task'][:70]}")
+        if not rows:
+            print("no role runs yet — try: revenueos agent run research \"...\"")
+        return 0
+    if args.sub == "show":
+        if not rest:
+            print("usage: revenueos agent show <id>", file=sys.stderr)
+            return 2
+        row = store.get_agent_run(int(rest[0]))
+        if not row:
+            print(f"no role run {rest[0]}", file=sys.stderr)
+            return 2
+        print(json.dumps(row, indent=2, default=str))
+        return 0
+    return 2
+
+
+def cmd_learn(args: argparse.Namespace) -> int:
+    """Turn measured outcomes into lessons, or record one by hand. Lessons ride in every prompt."""
+    from .learning import add_lesson, lessons_from_outcomes, recent_lessons
+
+    ws, store, _ctx = _boot(args)
+    if args.sub == "add":
+        missing = [f for f in ("title", "attempt", "result", "evidence") if not getattr(args, f, None)]
+        if missing:
+            print(f"missing --{' --'.join(missing)}", file=sys.stderr)
+            return 2
+        add_lesson(ws, args.title, attempt=args.attempt, result=args.result, evidence=args.evidence,
+                   why=args.why or "stated by the operator", lesson=args.lesson or "pending analysis",
+                   apply_when=args.apply_when or "")
+        print("recorded in learning-loop/LESSONS.md (newest first); it is injected into every prompt for 60 days.")
+        return 0
+    written = lessons_from_outcomes(ws, store, None if args.no_llm else maybe_llm())
+    newest = recent_lessons(ws).splitlines()
+    title = newest[0].lstrip("# ").strip() if newest else ""
+    print(f"{written} new lesson(s) from measured outcomes." if written else
+          "0 new lessons — every measured outcome already has one (or nothing has been measured yet).")
+    if title:
+        print(f"newest: {title}")
+    return 0
+
+
+def cmd_lessons(args: argparse.Namespace) -> int:
+    from .learning import recent_lessons
+
+    ws, _store, _ctx = _boot(args)
+    text = recent_lessons(ws, days=args.days, max_chars=200000)
+    print(text if text else f"no lessons in the last {args.days} days — run `revenueos learn` after something is measured.")
+    return 0
+
+
+def cmd_refine(args: argparse.Namespace) -> int:
+    """One small, evidence-backed edit to a role spec — or the snapshot restored."""
+    from .learning import RefinementRefused, list_snapshots, refine, rollback
+
+    ws, _store, _ctx = _boot(args)
+    if args.rollback is not None:
+        try:
+            snap = rollback(ws, args.role, args.rollback or None)
+        except (FileNotFoundError, ValueError) as exc:
+            print(exc, file=sys.stderr)
+            if list_snapshots(ws, args.role):
+                print("available:", *[p.name for p in list_snapshots(ws, args.role)], sep="\n  ", file=sys.stderr)
+            return 2
+        print(f"{args.role} spec restored from {snap.name}")
+        return 0
+    if not (args.evidence and args.change):
+        print("--evidence and --change are both required (a refinement without evidence is a guess)", file=sys.stderr)
+        return 2
+    try:
+        ref = refine(ws, args.role, args.evidence, args.change, None if args.no_llm else maybe_llm())
+    except RefinementRefused as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    except (FileNotFoundError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    print(f"{ref.role} spec refined ({ref.diff_lines} changed line(s), {ref.mode}).\n"
+          f"  snapshot: learning-loop/snapshots/{ref.snapshot.name}   undo: revenueos refine {ref.role} --rollback")
+    return 0
+
+
 def cmd_correct(args: argparse.Namespace) -> int:
     _ws, _store, ctx = _boot(args)
     ctx.add_correction(args.title, args.context, args.correction, args.apply_when, source="cli")
@@ -497,6 +747,56 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("email", nargs="?")
     s.add_argument("password", nargs="?")
     s.set_defaults(fn=cmd_accounts)
+    s = sub.add_parser("objective", help="the revenue objective RevenueOS is working towards, and its trail")
+    s.add_argument("verb", choices=["add", "list", "show", "set", "note", "pause", "resume", "done"])
+    s.add_argument("target", nargs="?", help="the objective title (add) or its id (everything else)")
+    s.add_argument("text", nargs="?", help="note text (note)")
+    s.add_argument("--strategy", help="how the business intends to reach it")
+    s.add_argument("--next", help="what to do next (normally written by the heartbeat)")
+    s.add_argument("--kind", default="evidence", help="note kind: evidence|action|result|failure|lesson|next")
+    s.set_defaults(fn=_objective_args)
+
+    s = sub.add_parser("messages", help="what RevenueOS has to say to you")
+    s.add_argument("--to", default="operator")
+    s.add_argument("--unread", action="store_true")
+    s.add_argument("--mark-read", action="store_true")
+    s.add_argument("--limit", type=int, default=50)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_messages)
+
+    s = sub.add_parser("agent", help="run a specialised role (research | marketing | sales | measurement)")
+    s.add_argument("sub", choices=["run", "runs", "show"])
+    s.add_argument("rest", nargs="*", help='run: <role> "<task>"   ·   show: <id>')
+    s.add_argument("--role", help="runs: filter by role")
+    s.add_argument("--limit", type=int, default=20)
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--no-llm", action="store_true")
+    s.set_defaults(fn=cmd_agent)
+
+    s = sub.add_parser("learn", help="turn measured outcomes into lessons (learning-loop/LESSONS.md)")
+    s.add_argument("sub", nargs="?", choices=["add"], default=None)
+    s.add_argument("--title")
+    s.add_argument("--attempt")
+    s.add_argument("--result")
+    s.add_argument("--evidence")
+    s.add_argument("--why")
+    s.add_argument("--lesson")
+    s.add_argument("--apply-when", dest="apply_when")
+    s.add_argument("--no-llm", action="store_true")
+    s.set_defaults(fn=cmd_learn)
+
+    s = sub.add_parser("lessons", help="what RevenueOS learned from measured results")
+    s.add_argument("--days", type=int, default=60)
+    s.set_defaults(fn=cmd_lessons)
+
+    s = sub.add_parser("refine", help="one small, evidence-backed edit to a role spec (snapshotted, reversible)")
+    s.add_argument("role")
+    s.add_argument("--evidence", help="what was observed that justifies the change")
+    s.add_argument("--change", help="the change, in one line")
+    s.add_argument("--rollback", nargs="?", const="", default=None, help="restore the latest (or a named) snapshot")
+    s.add_argument("--no-llm", action="store_true")
+    s.set_defaults(fn=cmd_refine)
+
     s = sub.add_parser("correct", help="record a permanent correction")
     s.add_argument("title")
     s.add_argument("--context", required=True)

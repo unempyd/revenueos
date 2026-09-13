@@ -107,6 +107,36 @@ approved action.
 | `monitor` | Public conversations (from a Hacker News search) that pass a strict, default-reject relevance gate against the business | — | — (a market signal is a prompt to act elsewhere, not itself measured) |
 | `measure` | — | — | Runs after execution and records one outcome per executed action, honestly: `pending` until evidence exists, `measured` or `no_effect` once it does, `unmeasurable` with a note on what would measure it |
 
+## Roles and the learning loop
+
+Some questions are not a worker's job — "what does this market actually pay", "what is the one
+thing stopping revenue here", "did last month's work change anything". Those go to a **role**:
+a small specialist (`research`, `marketing`, `sales`, `measurement`) whose written spec lives in
+`learning-loop/roles/<role>.md` — its purpose, its inputs, the JSON shape it must answer in, and
+hard rules it may not break: evidence behind every claim (a URL, an action id, a metric name, or
+the words "not observed"), no invented numbers, and "cannot determine" when that is the truth.
+`revenueos agent run <role> "<task>"` runs one. A role may split its task across other roles;
+those run in parallel, two levels deep at most, and their answers hang off the parent's. Every
+attempt — the failures included — is one row in `agent_runs`, with what was asked, what came
+back, and which parent asked for it. A role that answers outside its contract is recorded as a
+failure with the raw text kept; nothing is fabricated to fill the gap. Roles never act: what
+they propose arrives in TODAY as ordinary pending actions, for the same human Approve/Execute.
+
+What the system learns is written down in the same directory, in files a person can read:
+
+- `learning-loop/CORRECTIONS.md` — standing corrections from the operator (`revenueos correct`).
+- `learning-loop/LESSONS.md` — one dated block per measured outcome (`revenueos learn`). What
+  was attempted, what the evidence showed, before → after: those lines are read off the store,
+  never written by a model. Only the "why" and the "lesson" are analysis, and with no model
+  configured they say so.
+
+Both are injected into every prompt (corrections for 30 days, lessons for 60), so the next run
+starts where the last one ended. When the evidence says a role's spec itself is wrong,
+`revenueos refine <role> --evidence "..." --change "..."` edits it — a dated line, or one
+rewritten section, never more than ~20 changed lines, and never the spec's `## Purpose` section
+with its hard rules. Each accepted refinement snapshots the spec first and logs the evidence in
+`learning-loop/REFINEMENTS.md`; `revenueos refine <role> --rollback` puts the old one back.
+
 ## The approval surface
 
 Three ways to see what RevenueOS found and decide what happens to it — all backed by the
@@ -136,6 +166,41 @@ service health, the schedule with next-run times, the run journal, and the per-a
 activity log; it is open by default and can be placed behind a bearer token. Continuous
 operation is the one capability gated by tier — see `docs/community-vs-hosted.md`.
 
+## Objectives, heartbeat and messages
+
+So that a customer sees one system continuously working on their business rather than a
+collection of scheduled jobs, three small pieces sit on top of the loop — all of them
+stored in the same SQLite file and scheduled by the same orchestrator. There is no
+separate daemon and no second product layer.
+
+- **Objectives** (`objectives`, `objective_events`; module `src/revenueos/objectives.py`) —
+  one row for what the business is trying to achieve, with a status
+  (active/paused/done), a human-owned `strategy` and a machine-written `next_action`.
+  `revenueos init` creates it from the questionnaire's objective answer; `revenueos
+  objective add | list | show | set | note | pause | resume | done` maintains it by hand.
+  Everything observed, done, measured or failed is appended to it as an event — kinds
+  `evidence`, `action`, `result`, `failure`, `lesson`, `next` and `heartbeat` — so the
+  trail behind a goal is readable without opening a log file.
+- **Heartbeat** (`src/revenueos/workers/heartbeat.py`) — an ordinary worker, scheduled by
+  the orchestrator every 30 minutes (`data/automations.json`, entry `heartbeat`). It sends,
+  publishes and spends nothing, and works with no model available. Each run it reads the
+  state the other workers wrote — pending opportunities by type, approvals waiting and
+  which of them have been waiting more than 24 hours, outcomes measured vs. still awaiting
+  measurement, the leads funnel, failed runs classified as *model unavailable* / *network*
+  / *worker failure*, and sends that are externally blocked (no mailbox) — decides the
+  single next action from `today.rank_next` plus the objective's own plan, appends exactly
+  one `heartbeat` event per run to every active objective, adds one `result` event per
+  newly measured outcome (deduplicated by action id) and one `failure` event per distinct
+  worker and error class per day, and updates `objectives.next_action`.
+- **Messages** (`messages`) — the heartbeat posts a note to the operator only when a human
+  is actually needed: approvals are waiting, a send is blocked, or a failure class was seen
+  for the first time today. An identical note is not posted again while the previous one is
+  unread. `revenueos messages [--unread] [--mark-read]` reads them; the panel shows them on
+  TODAY as "Inbox from RevenueOS" with a mark-read button, and `/api/today` carries them.
+
+TODAY (CLI and panel) leads with the objective, its next action and the last heartbeat, so
+the answer to "what is RevenueOS doing for me?" is the first thing on the page.
+
 ## Capability packs
 
 RevenueOS ships 13 capability packs — ads, agency, cmo, core, creative, growth,
@@ -164,6 +229,9 @@ Everything the loop produces is one SQLite file with a small set of tables:
   worker write to — checked before every send.
 - **runs** — one row per worker invocation (worker name, workflow/automation name, status,
   summary), the record the orchestrator and `revenueos doctor` read.
+- **objectives → objective_events, messages** — what the business is working towards, the
+  trail behind it, and the notes RevenueOS leaves for a human. See *Objectives, heartbeat
+  and messages* above.
 
 See `docs/security-and-approval.md` for how the suppression list and send cap are enforced,
 and `docs/proof.md` for a real run through this exact model.

@@ -19,6 +19,7 @@ TOOL_NAMES = {
     "revenueos_ignore",
     "revenueos_measure",
     "revenueos_search_skills",
+    "revenueos_lessons",
 }
 
 
@@ -51,6 +52,16 @@ async def test_tools_registered(server):
 async def test_resources_registered(server):
     resources = await server.list_resources()
     assert {str(r.uri) for r in resources} == {"revenueos://today", "revenueos://results"}
+
+
+async def test_lessons_tool_reads_the_learning_loop(server, workspace, onboarded):
+    from revenueos.learning import add_lesson
+
+    assert _structured(await server.call_tool("revenueos_lessons", {}))["count"] == 0
+    add_lesson(workspace, "recall reminders beat discounts", attempt="sent both",
+               result="measured — replies 1 → 4", evidence="action #7")
+    data = _structured(await server.call_tool("revenueos_lessons", {}))
+    assert data["count"] == 1 and "recall reminders beat discounts" in data["lessons"]
 
 
 async def test_today_empty_workspace(server, onboarded):
@@ -124,7 +135,7 @@ async def test_results_resource_renders_text(server, onboarded):
     contents = await server.read_resource("revenueos://results")
     text = contents[0].content
     assert text.startswith("RESULTS — Acme Scheduling")
-    assert "0 opportunities found" in text
+    assert "actions: 0 found" in text
 
 
 def test_underlying_functions_are_plain_python(workspace, onboarded, store):

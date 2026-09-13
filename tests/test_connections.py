@@ -156,6 +156,60 @@ def test_google_search_console_ga4_calendar_and_ads(workspace, monkeypatch):
     assert google.ads_set_budget(cs, "customers/1234567890/campaignBudgets/5", 10.0, client=client)["daily_amount"] == 10.0
 
 
+def _gaql_router(req: httpx.Request):
+    """searchStream answers by the FROM clause, in the REST (camelCase) row shape the API returns."""
+    q = json.loads(req.content)["query"]
+    if "FROM keyword_view" in q:
+        assert "ad_group_criterion.quality_info.quality_score" in q and "segments.date DURING LAST_28_DAYS" in q
+        return [{"results": [
+            {"campaign": {"id": "11", "name": "Brand"}, "adGroup": {"id": "5", "name": "Core"}, "adGroupCriterion": {"criterionId": "901", "status": "ENABLED",
+             "keyword": {"text": "hair salon", "matchType": "BROAD"}, "qualityInfo": {"qualityScore": 3}}, "metrics": {"costMicros": "120000000", "clicks": 240, "impressions": 8000, "conversions": 0}},
+            {"campaign": {"id": "12", "name": "Balayage"}, "adGroup": {"id": "6", "name": "Colour"}, "adGroupCriterion": {"criterionId": "902", "status": "ENABLED",
+             "keyword": {"text": "balayage adelaide", "matchType": "EXACT"}, "qualityInfo": {"qualityScore": 8}}, "metrics": {"costMicros": "90000000", "clicks": 200, "impressions": 4000, "conversions": 6}},
+            {"campaign": {"id": "12", "name": "Balayage"}, "adGroup": {"id": "6", "name": "Colour"}, "adGroupCriterion": {"criterionId": "903", "status": "ENABLED",
+             "keyword": {"text": "ombre hair", "matchType": "PHRASE"}}, "metrics": {"costMicros": "0", "clicks": 0, "impressions": 0, "conversions": 0}}]}]
+    if "FROM search_term_view" in q:
+        assert "search_term_view.status" in q and "segments.search_term_match_type" in q
+        return [{"results": [
+            {"campaign": {"id": "11", "name": "Brand"}, "adGroup": {"id": "5", "name": "Core"}, "searchTermView": {"searchTerm": "hair salon jobs", "status": "NONE"},
+             "segments": {"searchTermMatchType": "BROAD"}, "metrics": {"costMicros": "40000000", "clicks": 90, "impressions": 3000, "conversions": 0}},
+            {"campaign": {"id": "11", "name": "Brand"}, "adGroup": {"id": "5", "name": "Core"}, "searchTermView": {"searchTerm": "hair salon jobs", "status": "NONE"},
+             "segments": {"searchTermMatchType": "BROAD"}, "metrics": {"costMicros": "5000000", "clicks": 10, "impressions": 300, "conversions": 0}},
+            {"campaign": {"id": "12", "name": "Balayage"}, "adGroup": {"id": "6", "name": "Colour"}, "searchTermView": {"searchTerm": "balayage adelaide", "status": "ADDED"},
+             "segments": {"searchTermMatchType": "EXACT"}, "metrics": {"costMicros": "60000000", "clicks": 150, "impressions": 2500, "conversions": 5}},
+            {"campaign": {"id": "11", "name": "Brand"}, "adGroup": {"id": "5", "name": "Core"}, "searchTermView": {"searchTerm": "free haircut", "status": "EXCLUDED"},
+             "segments": {"searchTermMatchType": "BROAD"}, "metrics": {"costMicros": "30000000", "clicks": 70, "impressions": 1000, "conversions": 0}}]}]
+    if "FROM campaign_criterion" in q:
+        assert "campaign_criterion.negative = TRUE" in q
+        return [{"results": [{"campaign": {"id": "11", "name": "Brand"}, "campaignCriterion": {"criterionId": "77", "keyword": {"text": "free", "matchType": "BROAD"}}}]}]
+    if "FROM shared_criterion" in q:
+        assert "shared_set.type = 'NEGATIVE_KEYWORDS'" in q
+        return [{"results": [{"sharedSet": {"id": "500", "name": "Universal negatives"}, "sharedCriterion": {"keyword": {"text": "jobs", "matchType": "PHRASE"}}},
+                             {"sharedSet": {"id": "500", "name": "Universal negatives"}, "sharedCriterion": {"keyword": {"text": "course", "matchType": "BROAD"}}}]}]
+    if "FROM campaign_shared_set" in q:
+        return [{"results": [{"campaign": {"id": "11"}, "sharedSet": {"id": "500", "name": "Universal negatives"}},
+                             {"campaign": {"id": "12"}, "sharedSet": {"id": "500", "name": "Universal negatives"}}]}]
+    return {"error": f"unexpected query {q[:60]}"}
+
+
+def test_google_ads_keyword_search_term_and_negative_reads(workspace, monkeypatch):
+    cs = ConnectionStore(workspace)
+    _google_conn(cs, ["https://www.googleapis.com/auth/adwords"])
+    monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN", "dev")
+    client = httpx.Client(transport=_mock({("POST", "/v18/customers/1234567890/googleAds:searchStream"): (200, _gaql_router)}))
+    kws = google.ads_keywords(cs, client=client)
+    assert {k["text"]: (k["match_type"], k["quality_score"], k["cost"], k["impressions"]) for k in kws} == {
+        "hair salon": ("broad", 3, 120.0, 8000), "balayage adelaide": ("exact", 8, 90.0, 4000), "ombre hair": ("phrase", None, 0.0, 0)}
+    terms = google.ads_search_terms(cs, client=client)
+    by = {t["text"]: t for t in terms}
+    assert by["hair salon jobs"]["cost"] == 45.0 and by["hair salon jobs"]["clicks"] == 100 and by["hair salon jobs"]["status"] == "none"  # two rows aggregated
+    assert by["balayage adelaide"]["status"] == "added" and by["free haircut"]["status"] == "excluded" and by["hair salon jobs"]["match_type"] == "broad"
+    negs = google.ads_negative_keywords(cs, client=client)
+    assert negs["campaign"] == [{"text": "free", "match_type": "broad", "campaign_id": "11", "campaign_name": "Brand"}]
+    assert negs["lists"][0]["name"] == "Universal negatives" and [k["text"] for k in negs["lists"][0]["keywords"]] == ["jobs", "course"]
+    assert {a["campaign_id"] for a in negs["list_campaigns"]} == {"11", "12"}
+
+
 # ── Meta ──────────────────────────────────────────────────────────────────────
 def test_meta_campaigns_waste_and_pause(workspace):
     cs = ConnectionStore(workspace)

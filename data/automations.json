@@ -62,6 +62,13 @@
       "skill": "ads-live",
       "enabled": true,
       "description": "Every 6 hours: connected ad accounts, wasting campaigns queued to pause."
+    },
+    {
+      "name": "heartbeat",
+      "schedule": "*/30 * * * *",
+      "skill": "heartbeat",
+      "enabled": true,
+      "description": "Check objectives, opportunities, approvals, measurements and failures every 30 minutes; write the next action and message the operator when a human is needed"
     }
   ]
 }

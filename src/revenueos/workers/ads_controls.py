@@ -4,6 +4,8 @@ only with evidence from the snapshot, `unknown` when the evidence is absent, `no
 surface does not apply, never a fixed platform-wide threshold.
 
 Runs on both inputs the same way: a CSV export (ads-audit worker) or a connected account (ads-live worker).
+Keyword, search-term and negative-keyword evidence (`ads_terms.attach`) rides on the same snapshot, bounded and
+with a coverage block, so the fourteen keyword-level Google controls can be decided instead of left unknown.
 Findings are validated against the vendored `finding` contract; every `fail` becomes an action the owner
 approves, executed by the platform skill; the next audit re-checks it (a fail that becomes a pass is the
 measured outcome). No health score is computed: upstream marks every control experimental and keeps the
@@ -25,6 +27,7 @@ from ..sanitize import strip_solicitations
 from ..store import Store
 from ..vendor.claude_ads_core import ContractError
 from ..vendor.claude_ads_core.contracts import validate_contract
+from .ads_terms import bounded_json
 
 MANIFESTS = Path(__file__).resolve().parents[1] / "vendor" / "claude_ads_data" / "control-plane" / "manifests"
 PLATFORM_SKILL = {"google": "ads/ads-google", "meta": "ads/ads-meta", "youtube": "ads/ads-youtube", "linkedin": "ads/ads-linkedin",
@@ -84,15 +87,58 @@ evidence (array of objects), confidence (high|medium|low|none), observation, dia
 {catalog}"""
 
 
-def _parse_findings(raw: str) -> list[dict[str, Any]]:
+NOT_EVALUATED = "not evaluated: the model returned no usable verdict for this batch"
+
+
+def _parse_array(raw: str) -> list[dict[str, Any]] | None:
+    """The response's JSON array, or None when no array parsed — an empty array is an answer, not a failure."""
     m = re.search(r"\[.*\]", raw, re.S)
     if not m:
-        return []
+        return None
     try:
-        data = json.loads(m.group(0))
+        return [d for d in json.loads(m.group(0)) if isinstance(d, dict)]
     except json.JSONDecodeError:
-        return []
-    return [d for d in data if isinstance(d, dict)]
+        return None
+
+
+def _parse_findings(raw: str) -> list[dict[str, Any]]:
+    """Every complete JSON object in the response, even when the array is cut off.
+
+    A batch of 24 verdicts can run past the token ceiling, and a truncated array parses as nothing:
+    every control in it would then be filed as `unknown`, which claims the account data was missing
+    when in fact nothing was read. Salvaging the complete objects keeps the verdicts that were made.
+    """
+    arr = _parse_array(raw)
+    if arr is not None:
+        return arr
+    out: list[dict[str, Any]] = []
+    depth = start = 0
+    in_str = escaped = False
+    for i, ch in enumerate(raw):
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth:
+            depth -= 1
+            if depth == 0:
+                try:
+                    d = json.loads(raw[start:i + 1])
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(d, dict):
+                    out.append(d)
+    return out
 
 
 def _coerce(f: dict[str, Any], control_id: str) -> dict[str, Any]:
@@ -115,27 +161,49 @@ def evaluate_controls(llm: LLM, ws: Workspace, ctx: BusinessContext, platform: s
     src, slug = skill_id.split("/", 1)
     skill, _ = strip_solicitations(skill_text(ws, src, slug))
     system = SYSTEM.format(platform=platform, skill=skill[:8000], catalog=catalog_text(ws, platform))
+    body = "=== BUSINESS CONTEXT ===\n" + ctx.prompt_summary(2500) + "\n\n=== ACCOUNT SNAPSHOT ===\n" + bounded_json(snapshot)
+
+    def ask(chunk: list[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], bool]:
+        """The verdicts in the response, and whether the response was usable at all (an empty array is usable)."""
+        user = body + "\n\n=== CONTROLS TO EVALUATE ===\n" + "\n".join(f"- {c['control_id']}: {c['intent']}" for c in chunk)
+        raw = llm.complete_sync([Message("system", system), Message("user", user)], max_tokens=min(16000, 400 * len(chunk)))
+        found = _parse_findings(raw)
+        return {str(f.get("control_id")): f for f in found}, bool(found) or _parse_array(raw) is not None
+
     findings: list[dict[str, Any]] = []
     for i in range(0, len(controls), batch):
         chunk = controls[i:i + batch]
-        user = ("=== BUSINESS CONTEXT ===\n" + ctx.prompt_summary(2500) + "\n\n=== ACCOUNT SNAPSHOT ===\n" + json.dumps(snapshot)[:20000]
-                + "\n\n=== CONTROLS TO EVALUATE ===\n" + "\n".join(f"- {c['control_id']}: {c['intent']}" for c in chunk))
-        raw = llm.complete_sync([Message("system", system), Message("user", user)], max_tokens=6000)
-        got = {str(f.get("control_id")): f for f in _parse_findings(raw)}
+        try:
+            got, usable = ask(chunk)
+        except Exception:  # noqa: BLE001 — one failed batch must not lose the rest
+            got, usable = {}, False
+        if not usable and len(chunk) > 1:
+            # An unusable response is not evidence about the account: split once and ask again rather
+            # than filing two dozen controls as `unknown` for a reason that was never true.
+            for half in (chunk[: len(chunk) // 2], chunk[len(chunk) // 2:]):
+                try:
+                    got.update(ask(half)[0])
+                except Exception:  # noqa: BLE001
+                    continue
         for c in chunk:
-            f = _coerce(got.get(c["control_id"], {}), c["control_id"])
+            raw_f = got.get(c["control_id"])
+            f = _coerce(raw_f or {}, c["control_id"])
             try:
                 validate_contract("finding", f)
             except ContractError:
                 f = _coerce({}, c["control_id"])
+            if raw_f is None and not f["diagnosis"]:
+                f["diagnosis"] = NOT_EVALUATED
             findings.append(f)
     return findings
 
 
 def summarise(findings: list[dict[str, Any]]) -> dict[str, int]:
-    out = {"checked": len(findings), "pass": 0, "fail": 0, "unknown": 0, "not_applicable": 0}
+    out = {"checked": len(findings), "pass": 0, "fail": 0, "unknown": 0, "not_applicable": 0, "not_evaluated": 0}
     for f in findings:
         out[f["status"]] = out.get(f["status"], 0) + 1
+        if f["diagnosis"] == NOT_EVALUATED:
+            out["not_evaluated"] += 1
     return out
 
 
@@ -143,10 +211,11 @@ def report_markdown(platform: str, snapshot: dict[str, Any], findings: list[dict
     s = summarise(findings)
     lines = [f"# {platform.title()} Ads — control audit", "",
              f"Window {snapshot['window']['start']} → {snapshot['window']['end']} · spend {snapshot.get('spend')} {snapshot.get('currency')} · "
-             f"{s['checked']} controls evaluated: {s['fail']} fail · {s['pass']} pass · {s['unknown']} unknown (evidence not in the data) · {s['not_applicable']} not applicable", "",
+             f"{s['checked']} controls evaluated: {s['fail']} fail · {s['pass']} pass · {s['unknown'] - s['not_evaluated']} unknown (evidence not in the data) · "
+             f"{s['not_applicable']} not applicable" + (f" · {s['not_evaluated']} not evaluated (no usable model verdict — not a statement about the account)" if s["not_evaluated"] else ""), "",
              "_No health score: the upstream catalogue marks every control experimental and ships scoring disabled; RevenueOS does not invent weights._", ""]
     for status, title in (("fail", "## Failing controls"), ("pass", "## Passing controls"), ("unknown", "## Unknown — what evidence would decide it")):
-        rows = [f for f in findings if f["status"] == status]
+        rows = [f for f in findings if f["status"] == status and f["diagnosis"] != NOT_EVALUATED]
         if not rows:
             continue
         lines += [title, ""]
@@ -172,7 +241,7 @@ def audit(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, ru
                                                                           "window": snapshot["window"], "findings": findings}, indent=1), encoding="utf-8")
     ws.reports.mkdir(parents=True, exist_ok=True)
     (ws.reports / f"ads-{platform}-controls.md").write_text(report_markdown(platform, snapshot, findings), encoding="utf-8")
-    for k in ("checked", "fail", "pass", "unknown"):
+    for k in ("checked", "fail", "pass", "unknown", "not_evaluated"):
         store.record_metric(f"ads_controls_{k}", float(s[k]), platform=platform, window_end=window_end)
     intents = {c["control_id"]: c["intent"] for c in controls}
     created = 0

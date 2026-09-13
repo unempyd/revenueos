@@ -29,7 +29,7 @@ LINES: list[tuple[str, str, str]] = [
     ("market_signal", "conversation to join", "conversations to join"),
 ]
 
-STATUS_MARK = {"measured": "✓", "no_effect": "○", "pending": "…", "unmeasurable": "–", None: "…"}
+STATUS_MARK = {"measured": "✓", "produced": "▪", "no_effect": "○", "pending": "…", "unmeasurable": "–", None: "…"}
 
 
 @dataclass
@@ -42,6 +42,8 @@ class Brief:
     summary: dict[str, Any] = field(default_factory=dict)
     funnel: dict[str, int] = field(default_factory=dict)
     approved: list[dict[str, Any]] = field(default_factory=list)  # decided yes, not executed yet
+    objective: dict[str, Any] | None = None                       # what all of this is for (objectives.py)
+    messages: list[dict[str, Any]] = field(default_factory=list)  # unread notes from RevenueOS to the operator
 
     def funnel_line(self) -> str | None:
         """'leads: 30 found · 9 contactable · 0 qualified' — three numbers, reported separately, so
@@ -75,9 +77,28 @@ class Brief:
             out.append(f"{mark} [{a['id']:>4}] {a['title'][:58]:<58} {what}")
         return out
 
+    def objective_lines(self) -> list[str]:
+        from .objectives import render_objective
+
+        return render_objective(self.objective)
+
+    def message_lines(self, limit: int = 5) -> list[str]:
+        if not self.messages:
+            return []
+        out = [f"INBOX FROM REVENUEOS ({len(self.messages)} unread)"]
+        for m in self.messages[:limit]:
+            first = (m.get("body") or "").strip().splitlines()
+            out.append(f"  [{m['id']:>3}] {m['subject']}" + (f" — {first[0][:80]}" if first else ""))
+        out.append("  revenueos messages --mark-read")
+        return out
+
     def render_text(self, company: str) -> str:
         head = [f"TODAY — {company}", ""]
-        body = self.lines()
+        body = self.objective_lines() + [""]
+        msgs = self.message_lines()
+        if msgs:
+            body += msgs + [""]
+        body += self.lines()
         if not self.actions and not self.approved:
             body += ["", "Nothing pending. Run `revenueos run all` or wait for the orchestrator."]
         else:
@@ -92,7 +113,8 @@ class Brief:
                     body.append(f"[{a['id']:>4}] {a['action_type']:<19} {a['title'][:90]}")
         if self.results:
             s = self.summary
-            body += ["", "RESULTS", f"{s.get('executed', 0)} action(s) executed, {s.get('measured', 0)} with a measured result; "
+            body += ["", "RESULTS", f"actions: {s.get('found', 0)} found · {s.get('executed', 0)} executed · "
+                     f"{s.get('measured', 0)} measured · {s.get('produced', 0)} produced (not published)",
                      f"{s.get('emails_sent', 0)} emails sent, {s.get('replies', 0)} replies, {s.get('booked', 0)} booked."]
             body += self.result_lines()
         ext = {k.removeprefix("growth_"): v for k, v in self.metrics.items() if k.startswith("growth_")}
@@ -135,6 +157,8 @@ def rank_next(store: Store, limit: int = 5) -> list[dict[str, Any]]:
 
 
 def build_brief(store: Store) -> Brief:
+    from .objectives import objective_block
+
     return Brief(
         counts=store.counts_by_type("pending"),
         pipeline_value=store.pipeline_value(),
@@ -144,4 +168,6 @@ def build_brief(store: Store) -> Brief:
         summary=store.results_summary(),
         funnel=store.lead_funnel(),
         approved=store.list_actions("approved"),
+        objective=objective_block(store),
+        messages=store.list_messages("operator", unread_only=True, limit=20),
     )

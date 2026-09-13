@@ -10,6 +10,11 @@ into an AccountSnapshot; this worker then runs the deterministic checks that nee
   * campaign_attention  — spend concentration (one campaign > 60 % of spend) and
                           campaigns pacing more than 25 % over their daily budget
 
+Keyword and search-term report exports dropped beside it (ads-<platform>.keywords.csv,
+ads-<platform>.search-terms.csv — Google Ads' own downloads) become evidence for the keyword-level
+controls and one deterministic finding: search terms with spend, no conversions and no exclusion
+(`search_term_waste`), measured by the next read of the same terms.
+
 When findings JSON exists at data/exports/ads-<platform>.findings.json (produced by the
 claude-ads audit skills: 250+ prose controls run by Claude), the vendored weighted scorer
 `score_account` and report renderer produce data/reports/ads-<platform>.md.  The shipped
@@ -32,7 +37,8 @@ from ..store import Store
 from ..vendor.claude_ads_core import ContractError, GenericCSVExportAdapter, ScoringError, score_account
 from ..vendor.claude_ads_core.adapters import AdapterError
 from ..vendor.claude_ads_core.reporting import render_markdown
-from . import WorkerResult, ads_controls
+from . import WorkerResult, ads_controls, ads_terms
+from .live import queue_search_term_waste
 
 PLATFORMS = ("google", "meta", "youtube", "linkedin", "tiktok", "microsoft", "apple", "amazon", "reddit", "pinterest", "snapchat", "x")
 SKILL_FOR = {"google": "ads/ads-google", "meta": "ads/ads-meta", "youtube": "ads/ads-youtube",
@@ -126,7 +132,7 @@ class AdsAuditWorker:
     upstream = "AgriciDaniel/claude-ads claude_ads_core (adapters, scoring, reporting)"
 
     def run(self, ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, run_id: int) -> WorkerResult:
-        exports = sorted(ws.exports.glob("ads-*.csv"))
+        exports = sorted(p for p in ws.exports.glob("ads-*.csv") if "." not in p.stem)  # ads-google.keywords.csv is a sidecar, not a platform
         if not exports:
             return WorkerResult(ok=True, summary="No ad data connected yet.", actions_created=0, details={"note": "export ads-<platform>.csv into data/exports/"})
         created, audited, errors = 0, [], []
@@ -156,6 +162,12 @@ class AdsAuditWorker:
                 )
                 created += 1 if aid else 0
             store.record_metric("ad_spend", float(snapshot.get("spend") or 0), platform=platform, window_end=snapshot["window"]["end"])
+            kws, terms = ads_terms.sidecars(ws.exports, platform)
+            if kws or terms:
+                ads_terms.attach(snapshot, keywords=kws, search_terms=terms)
+                ads_terms.write_terms(ws.exports, ads_terms.terms_record(platform, snapshot["window"], kws, terms, None, path.name))
+                created += queue_search_term_waste(store, run_id, platform, terms, snapshot["window"]["end"], currency,
+                                                   float((ctx.config.get("ads") or {}).get("search_term_min_spend", 20)))
 
             findings_path = path.with_suffix(".findings.json")
             score_note = ""
@@ -182,10 +194,12 @@ class AdsAuditWorker:
                 ctl = {"note": f"control audit failed: {type(exc).__name__}: {exc}"}
             if "checked" in ctl:
                 created += ctl.get("created", 0)
-                score_note += f", {ctl['checked']} controls: {ctl['fail']} fail / {ctl['pass']} pass / {ctl['unknown']} unknown → {ctl['report']}"
+                score_note += (f", {ctl['checked']} controls: {ctl['fail']} fail / {ctl['pass']} pass / {ctl['unknown'] - ctl.get('not_evaluated', 0)} unknown"
+                               + (f" / {ctl['not_evaluated']} not evaluated" if ctl.get("not_evaluated") else "") + f" → {ctl['report']}")
             elif ctl.get("note"):
                 score_note += f", {ctl['note']}"
-            audited.append(f"{platform} ({len(camps)} campaigns{score_note})")
+            ev = f", {len(kws)} keywords, {len(terms)} search terms" if (kws or terms) else ""
+            audited.append(f"{platform} ({len(camps)} campaigns{ev}{score_note})")
         summary = f"{created} ad action(s); audited {', '.join(audited) or 'nothing'}."
         if errors:
             summary += " Errors: " + "; ".join(errors)

@@ -152,3 +152,42 @@ def test_status_chip_and_approve_all(server, workspace, store):
     status, h, _ = _req(srv, "POST", "/approve-all", "", cookie=cookie)
     assert status == 303 and "Approved%202" in h["Location"]
     assert store.list_actions("pending") == [] and len(store.list_actions("approved")) == 2
+
+
+def test_objective_inbox_and_api_today_carry_the_heartbeat(server, workspace, store):
+    """The panel's TODAY answers "what is RevenueOS working on, and does it need me?"."""
+    srv, ctx = server
+    cookie = "rs=" + make_token()
+
+    _s, _h, page = _req(srv, "GET", "/", cookie=cookie)
+    assert "Objective" in page and "revenueos objective add" in page  # no objective yet: say how to set one
+
+    oid = store.create_objective("Fill 20 empty chairs a month", strategy="rebooking outreach")
+    aid = store.create_action("content_opportunity", "Write the rebooking guide", "…", dedupe_key="c:panel",
+                              context={"executor": "run_skill"})
+    store.set_action_status(aid, "approved")
+    from revenueos.workers import run_worker
+
+    result = run_worker("heartbeat", workspace, store, ctx, None, "panel-test")
+    assert result.ok
+
+    _s, _h, page = _req(srv, "GET", "/", cookie=cookie)
+    assert "Fill 20 empty chairs a month" in page
+    assert f"execute the approved action [{aid}]" in html.unescape(page)
+    assert "Inbox from RevenueOS (1 unread)" in page and "1 approved action(s) waiting to run" in page
+
+    _s, _h, body = _req(srv, "GET", "/api/today", cookie=cookie)
+    payload = json.loads(body)
+    assert payload["objective"]["id"] == oid and payload["objective"]["heartbeat"] == result.summary
+    assert [m["subject"] for m in payload["messages"]] == ["1 approved action(s) waiting to run"]
+
+    mid = payload["messages"][0]["id"]
+    status, headers, _ = _req(srv, "POST", f"/messages/{mid}/read", "", cookie=cookie)
+    assert status == 303 and "marked%20read" in headers["Location"]
+    assert store.list_messages("operator", unread_only=True) == []
+    _s, _h, body = _req(srv, "GET", "/api/today", cookie=cookie)
+    assert json.loads(body)["messages"] == []
+    assert "Inbox from RevenueOS" not in _req(srv, "GET", "/", cookie=cookie)[2]
+
+    # and the route is behind the session cookie like every other page
+    assert _req(srv, "POST", f"/messages/{mid}/read", "")[0] == 401

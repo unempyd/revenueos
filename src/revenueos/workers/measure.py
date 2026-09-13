@@ -18,8 +18,11 @@ the effect (the note says what would).
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
+import re
 from typing import Any
+from urllib.parse import urlparse
 
 from ..context import BusinessContext
 from ..llm import LLM
@@ -36,6 +39,25 @@ def _crawl(url: str, max_pages: int = 10):
     return fn(url, max_pages=max_pages)
 
 
+def local_host(url: str) -> str | None:
+    """The loopback/private host string `url` targets, or None for a public address. String/IP-literal
+    checks only, no DNS resolution: a re-check against 127.0.0.0/8, ::1, 'localhost', a .local name, or
+    an RFC1918 range (10/8, 172.16/12, 192.168/16) is not a check of the live site and must not be
+    recorded as a measured result."""
+    host = (urlparse(url if "//" in url else f"//{url}").hostname or "").lower()
+    if not host:
+        return None
+    if host == "localhost" or host.endswith(".local"):
+        return host
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return None
+    if ip.is_loopback or ip.is_private or ip.is_link_local:
+        return host
+    return None
+
+
 def page_snapshot(url: str) -> dict[str, Any]:
     raw = asyncio.run(_crawl(url, max_pages=1))
     data = json.loads(raw)
@@ -50,6 +72,10 @@ def measure_seo(store: Store, action: dict[str, Any]) -> tuple[str, dict[str, An
     url = action.get("source_url")
     if not url or kind in ("authority_gap", "indexing_surface"):
         return "unmeasurable", {"note": "needs Search Console clicks (connect google-search-console) to measure"}
+    host = local_host(url)
+    if host:
+        return "unmeasurable", {"note": f"re-checked against a local address ({host}), not the live site; "
+                                        "set `website` in revenueos.yaml to the public URL to measure it"}
     before = action["context"].get("before") or {}
     if kind == "no_sitemap":
         data = json.loads(asyncio.run(_crawl(url, max_pages=1)))
@@ -131,6 +157,29 @@ def measure_ads(ws: Workspace, store: Store, action: dict[str, Any]) -> tuple[st
                                                        "after_value": after["spend"], "before": before, "after": after}
 
 
+def measure_search_terms(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Search-term waste is measured by the next read of the same terms: excluded, or spending less, → measured; still spending → no_effect."""
+    from .ads_terms import read_terms
+
+    c = action["context"]
+    before = c.get("before") or {}
+    rec = read_terms(ws.exports, c.get("platform"))
+    if not rec:
+        return "pending", {"note": "no newer search-term read to compare against"}
+    if rec["window"]["end"] <= before.get("window_end", ""):
+        return "pending", {"note": "no newer search-term read yet"}
+    wanted = {(t["text"], t.get("ad_group_id")) for t in before.get("terms", [])}
+    now = {(t["text"], t.get("ad_group_id")): t for t in rec.get("search_terms", [])}
+    excluded = sum(1 for k in wanted if k in now and now[k]["status"] in ("excluded", "added_excluded"))
+    spend_after = round(sum(now[k]["cost"] for k in wanted if k in now and now[k]["status"] not in ("excluded", "added_excluded")), 2)
+    spend_before = float(before.get("spend") or 0)
+    after = {"window_end": rec["window"]["end"], "spend": spend_after, "excluded": excluded, "terms_seen": sum(1 for k in wanted if k in now)}
+    improved = excluded > 0 or spend_after < spend_before
+    note = f"{excluded} of {len(wanted)} terms now excluded; the rest spent {spend_after:.2f} in the new window (was {spend_before:.2f})"
+    return ("measured" if improved else "no_effect"), {"metric": "wasted_search_term_spend", "before_value": spend_before, "after_value": spend_after,
+                                                        "before": {"window_end": before.get("window_end"), "spend": spend_before, "terms": len(wanted)}, "after": after, "note": note}
+
+
 def measure_control(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """A failing ads control is measured by the next control audit: pass → measured, still fail → no_effect."""
     c = action["context"]
@@ -149,12 +198,55 @@ def measure_control(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[st
                                                     "before": c.get("before"), "after": {"status": f.get("status"), "window_end": data.get("window", {}).get("end")}}
 
 
+PRODUCED_NOTE = "deliverable produced, not published; publication and audience effect unmeasured — connect the channel or record the publication URL to measure it"
+
+
+def _deliverable_title(path) -> str:
+    """The first markdown heading in the deliverable, used only to look for it on the published page."""
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        m = re.match(r"^#{1,2}\s+(.+)$", line.strip())
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
+def _check_published(url: str, title: str) -> tuple[bool, str]:
+    """Fetch `url`; (True, '') when it's a 200 page whose body contains the deliverable's title,
+    (False, reason) otherwise. Never raises — a fetch failure is just evidence it isn't measurable yet."""
+    import httpx
+
+    try:
+        r = httpx.get(url, timeout=15.0, follow_redirects=True,
+                      headers={"User-Agent": "Mozilla/5.0 (compatible; RevenueOS/0.1; +https://unempyd.github.io/revenueos/)"})
+    except httpx.HTTPError as e:
+        return False, f"publication URL unreachable ({type(e).__name__})"
+    if r.status_code != 200:
+        return False, f"publication URL returned HTTP {r.status_code}"
+    if title and title.lower() not in r.text.lower():
+        return False, "publication URL is live but does not contain the deliverable's title yet"
+    return True, ""
+
+
 def measure_content(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     outputs = sorted(ws.outputs.glob(f"*-{action['id']}.md"))
-    if outputs:
-        return "measured", {"metric": "deliverable_written", "before_value": 0.0, "after_value": 1.0,
-                            "after": {"path": str(outputs[-1].relative_to(ws.root)), "chars": outputs[-1].stat().st_size}}
-    return "pending", {"note": "no deliverable in data/outputs yet"}
+    if not outputs:
+        return "pending", {"note": "no deliverable in data/outputs yet"}
+    path = outputs[-1]
+    after = {"path": str(path.relative_to(ws.root)), "chars": path.stat().st_size}
+    ctx = action.get("context") or {}
+    published_url = (ctx.get("published_url") or ctx.get("url") or (ctx.get("after") or {}).get("published_url"))
+    if not published_url:
+        return "produced", {"metric": "deliverable_produced", "before_value": 0.0, "after_value": 1.0, "after": after, "note": PRODUCED_NOTE}
+    host = local_host(published_url)
+    if host:
+        return "produced", {"metric": "deliverable_produced", "before_value": 0.0, "after_value": 1.0, "after": after,
+                            "note": f"publication URL ({host}) is a local address, not the live site; {PRODUCED_NOTE}"}
+    ok, reason = _check_published(published_url, _deliverable_title(path))
+    if ok:
+        return "measured", {"metric": "published", "before_value": 0.0, "after_value": 1.0,
+                            "after": {**after, "published_url": published_url}}
+    return "produced", {"metric": "deliverable_produced", "before_value": 0.0, "after_value": 1.0,
+                        "after": {**after, "published_url": published_url}, "note": f"{reason}; {PRODUCED_NOTE}"}
 
 
 class MeasureWorker:
@@ -163,10 +255,19 @@ class MeasureWorker:
     upstream = "pulse-cmo crawl (re-crawl), claude-ads aggregate, ai-sales-agent send rows"
 
     def run(self, ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, run_id: int) -> WorkerResult:
-        measured = pending = unchanged = 0
+        measured = pending = unchanged = produced = 0
         for action in store.executed_actions():
             last = action.get("outcome")
-            if last and last["status"] in ("measured", "unmeasurable"):
+            # one-time correction: outcomes recorded 'measured'/'deliverable_written' by the pre-honesty
+            # measure_content (file existence only, no publication evidence) are re-labelled 'produced'
+            # on the next run; every run after that is a stable 'produced' outcome and skipped as final.
+            stale_deliverable = bool(last) and last["status"] == "measured" and last.get("metric") == "deliverable_written"
+            # one-time correction: an SEO result 'measured' against a loopback/private host before that
+            # was caught is re-checked once (measure_seo now returns 'unmeasurable' for it); once it does,
+            # the status is no longer 'measured' and this no longer matches, so it is stable from then on.
+            stale_local_seo = (bool(last) and last["status"] == "measured" and action["action_type"] == "seo_opportunity"
+                               and bool(local_host(action.get("source_url") or "")))
+            if last and last["status"] in ("measured", "unmeasurable") and not (stale_deliverable or stale_local_seo):
                 continue  # final
             atype = action["action_type"]
             try:
@@ -176,6 +277,8 @@ class MeasureWorker:
                     status, data = measure_send(store, action)
                 elif action["context"].get("kind") == "control_fail":
                     status, data = measure_control(ws, action)
+                elif action["context"].get("kind") == "search_term_waste":
+                    status, data = measure_search_terms(ws, action)
                 elif atype in ("ad_waste", "campaign_attention"):
                     status, data = measure_ads(ws, store, action)
                 elif atype == "content_opportunity" or action["context"].get("executor") == "run_skill":
@@ -194,5 +297,8 @@ class MeasureWorker:
                 pending += 1
             elif status == "no_effect":
                 unchanged += 1
-        return WorkerResult(ok=True, summary=f"{measured} result(s) measured, {unchanged} re-checked with no change yet, {pending} still pending.", actions_created=0,
-                            details={"measured": measured, "pending": pending})
+            elif status == "produced":
+                produced += 1
+        return WorkerResult(ok=True, summary=f"{measured} result(s) measured, {produced} produced (not published), "
+                            f"{unchanged} re-checked with no change yet, {pending} still pending.", actions_created=0,
+                            details={"measured": measured, "produced": produced, "pending": pending})

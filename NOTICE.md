@@ -36,6 +36,7 @@ under `telemetry_stripped_from`).
 | ai-os-skills (kevinbadi) | No LICENSE file | Reference only |
 | marketing-skills (erron-ai) | No LICENSE file | Its MIT-licensed superset already comes in via the coreyhaines31 / scayver sources above |
 | business-skills (astDeniss) | No LICENSE file | Reference only |
+| Prime Agent (PrimeIntellect-ai/prime-agent, MIT, commit `878410b3981f20c6d685faa210ad0e43426cf483`, pinned 2026-09-12) | MIT and freely vendorable, but there is nothing to copy: its runtime is a TypeScript agent around an IPython REPL harness, which inside RevenueOS would be a second product layer beside the workers | Concepts only, re-implemented as RevenueOS-owned Python: persistent goals and heartbeats (`objectives`, the heartbeat worker), programmatic subagents (`rlm.spawn` → RevenueOS roles, `src/revenueos/roles.py` + `learning-loop/roles/`), and the Continual Harness (`/refine`: durable supplemental prompts and reusable subagent specs, refined by small evidence-backed edits with snapshots and rollback → `src/revenueos/learning.py`, `learning-loop/LESSONS.md`, `learning-loop/REFINEMENTS.md`) |
 
 If any of the unlicensed projects above publish a licence, they can be added the same way
 every other source was: a row in `upstream/MANIFEST.tsv` and a mapping in

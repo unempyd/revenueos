@@ -57,7 +57,9 @@ VENDOR_MAP: list[tuple[str, str, str, str]] = [
     # ── Business context + gates: markster-os schema, validator, learning loop ──
     ("markster-public__markster-os", "tools/validate_markster_os.py", "src/revenueos/vendor/markster/validate_markster_os.py", "file"),
     ("markster-public__markster-os", "company-context", "company-context", "tree"),
-    ("markster-public__markster-os", "learning-loop", "learning-loop", "tree"),
+    # overlay, not tree: learning-loop/ also holds RevenueOS-owned state that must survive a
+    # re-vendor — CORRECTIONS.md history, LESSONS.md, REFINEMENTS.md, roles/ and snapshots/.
+    ("markster-public__markster-os", "learning-loop", "learning-loop", "overlay"),
     ("markster-public__markster-os", "methodology", "methodology", "tree"),
     ("markster-public__markster-os", "playbooks", "playbooks", "tree"),
     ("markster-public__markster-os", "skills/*", "skills/gtm", "glob"),

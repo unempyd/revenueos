@@ -28,7 +28,7 @@ from .paths import Workspace
 from .store import Store
 from .tenants import Accounts, make_session, read_session
 from .today import build_brief
-from .workers import execute_action, run_worker
+from .workers import execute_action, refused, run_worker
 
 try:  # commercial plumbing is optional in the Community build
     from .billing import billing_http, load_license
@@ -259,12 +259,13 @@ LIVE = """<div class="stepper" id="stepper">{steps}</div>
 
 STEPS = (("connect", "Connect"), ("discover", "Discover"), ("analyse", "Analyse"), ("approve", "Approve"), ("execute", "Execute"), ("measure", "Measure"))
 WORKER_STEP = {"discover": "discover", "outreach": "discover", "inbox": "discover", "seo": "analyse", "ads-audit": "analyse", "ads-live": "analyse",
-               "analytics": "analyse", "content": "analyse", "monitor": "analyse", "billing": "analyse", "growth": "analyse", "measure": "measure"}
+               "analytics": "analyse", "content": "analyse", "monitor": "analyse", "billing": "analyse", "growth": "analyse", "measure": "measure",
+               "heartbeat": "measure"}
 WORKER_LABEL = {"discover": "Finding prospects", "outreach": "Drafting emails", "inbox": "Reading the mailbox", "seo": "Reading your website",
                 "ads-audit": "Auditing ad exports", "ads-live": "Reading your ad accounts", "analytics": "Reading Search Console / GA4",
                 "content": "Planning content", "monitor": "Scanning conversations", "billing": "Reading Stripe", "growth": "Recording external numbers",
-                "measure": "Re-checking earlier actions"}
-ALL_WORKERS = ["discover", "outreach", "inbox", "seo", "ads-audit", "ads-live", "analytics", "billing", "content", "monitor", "measure"]
+                "measure": "Re-checking earlier actions", "heartbeat": "Deciding what to do next"}
+ALL_WORKERS = ["discover", "outreach", "inbox", "seo", "ads-audit", "ads-live", "analytics", "billing", "content", "monitor", "measure", "heartbeat"]
 
 LOGIN = """<form method="post" action="/login"><label>Panel password</label><input type="password" name="password" autofocus>
 <p><button class="x">Sign in</button></p></form>"""
@@ -431,8 +432,9 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             msg = parse_qs(url.query).get("msg", [""])[0]
             if path == "/api/today":
                 b = build_brief(self.store)
-                self._send(json.dumps({"counts": b.counts, "funnel": b.funnel, "pipeline_value": b.pipeline_value, "actions": b.actions, "approved": b.approved,
-                                       "results": b.results, "summary": b.summary}, default=str), ctype="application/json")
+                self._send(json.dumps({"objective": b.objective, "counts": b.counts, "funnel": b.funnel, "pipeline_value": b.pipeline_value,
+                                       "actions": b.actions, "approved": b.approved, "results": b.results, "summary": b.summary,
+                                       "messages": b.messages}, default=str), ctype="application/json")
             elif path == "/results":
                 self._send(self._page("RESULTS", f"{self.ctx.company_name} — what RevenueOS did and what happened", self._results_html(), msg))
             elif path == "/onboard":
@@ -501,17 +503,47 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             approved_html = (f"<h2>Approved, waiting to run ({len(b.approved)})</h2>"
                              "<p class='sub'>You said yes. Nothing happens until Execute; Execute sends the email or runs the skill and the result lands in RESULTS.</p>"
                              + approved_rows) if b.approved else ""
-            return (f'<div class="brief">{html.escape(chr(10).join(b.lines()))}</div>{agents_html}{run_form}'
+            return (self._objective_html(b) + self._messages_html(b)
+                    + f'<div class="brief">{html.escape(chr(10).join(b.lines()))}</div>{agents_html}{run_form}'
                     "<p class='sub'>Read-only until you approve. Every line below is something observed about this business; nothing sends, publishes, changes a site or spends until you press Approve and then Execute.</p>"
                     '<h2>Approve / Execute / Ignore</h2>'
                     + (rows or "<p>Nothing pending.</p>")
                     + "<p class='sub'>Approve = mark as wanted. Execute = do it now (send / run the skill). Ignore = drop it.</p>"
                     + approved_html)
 
+        def _objective_html(self, b) -> str:
+            """What all of this is for — the objective, the next action, and the last heartbeat."""
+            from .objectives import HOW_TO_ADD
+
+            o = b.objective
+            if not o:
+                return f"<div class='brief'><span class='type'>Objective</span>\n{html.escape(HOW_TO_ADD)}</div>"
+            parts = [f"<span class='type'>Objective · {html.escape(o['status'])}</span>", f"<b>{html.escape(o['title'])}</b>"]
+            parts.append("Next: " + html.escape(o.get("next_action") or "not decided yet — the heartbeat sets this every 30 minutes"))
+            if o.get("heartbeat"):
+                when = html.escape((o.get("heartbeat_at") or "")[:16].replace("T", " "))
+                parts.append(f"<small>Last heartbeat {when} — {html.escape(o['heartbeat'])}</small>")
+            else:
+                parts.append("<small>No heartbeat yet — it runs every 30 minutes once the orchestrator is on.</small>")
+            return "<div class='brief'>" + "\n".join(parts) + "</div>"
+
+        def _messages_html(self, b) -> str:
+            if not b.messages:
+                return ""
+            rows = []
+            for m in b.messages[:20]:
+                first = (m.get("body") or "").strip().splitlines()
+                rows.append(
+                    '<div class="row"><div class="t"><span class="type">RevenueOS needs you</span>'
+                    f"<b>{html.escape(m['subject'])}</b><small>{html.escape(first[0][:300]) if first else ''}</small></div>"
+                    f'<form method="post" action="/messages/{m["id"]}/read"><button>Mark read</button></form></div>')
+            return f"<h2>Inbox from RevenueOS ({len(b.messages)} unread)</h2>" + "".join(rows)
+
         def _results_html(self) -> str:
             b = build_brief(self.store)
             s = b.summary
-            head = (f"<div class='brief'>{s.get('found', 0)} opportunities found · {s.get('executed', 0)} executed · {s.get('measured', 0)} measured\n"
+            head = (f"<div class='brief'>actions: {s.get('found', 0)} found · {s.get('executed', 0)} executed · "
+                    f"{s.get('measured', 0)} measured · {s.get('produced', 0)} produced (not published)\n"
                     f"{s.get('emails_sent', 0)} emails sent · {s.get('replies', 0)} replies · {s.get('bounces', 0)} bounces · {s.get('booked', 0)} booked\n"
                     f"${s.get('pipeline_value', 0):,.0f} pipeline</div>")
             ext = {k.removeprefix("growth_"): v for k, v in b.metrics.items() if k.startswith("growth_")}
@@ -521,7 +553,7 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             for a in b.results[:200]:
                 o = a.get("outcome") or {}
                 st = o.get("status") or "pending"
-                cls = {"measured": "ok", "pending": "pend"}.get(st, "none")
+                cls = {"measured": "ok", "produced": "pend", "pending": "pend"}.get(st, "none")
                 if o.get("metric") is not None and o.get("after_value") is not None:
                     what = f"{o['metric']}: {o.get('before_value') or 0:g} → {o['after_value']:g}" + (f" — {o['note']}" if o.get("note") else "")
                 else:
@@ -766,13 +798,17 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                 self._redirect("/?msg=" + quote(f"Approved {n} action(s). Nothing runs until you press Execute on each, or Run everything and watch."))
                 return
             if len(parts) == 2 and parts[0] == "run":
-                names = ["discover", "outreach", "inbox", "seo", "ads-audit", "content", "monitor", "measure"] if parts[1] == "all" else [parts[1]]
+                names = ["discover", "outreach", "inbox", "seo", "ads-audit", "content", "monitor", "measure", "heartbeat"] if parts[1] == "all" else [parts[1]]
                 llm = maybe_llm()
                 results = [run_worker(n, self.ws, self.store, self.ctx, llm, "panel") for n in names]
                 new = sum(r.actions_created for r in results)
                 lines = [f"Ran {len(names)} check(s): {new} new opportunit{'y' if new == 1 else 'ies'}."]
                 lines += [f"{n}: {r.summary or ('failed: ' + (r.error or ''))}" for n, r in zip(names, results, strict=True)]
                 self._redirect("/?msg=" + quote("\n".join(lines)[:1200]))
+                return
+            if len(parts) == 3 and parts[0] == "messages" and parts[2] == "read" and parts[1].isdigit():
+                self.store.mark_read(int(parts[1]))
+                self._redirect("/?msg=" + quote("Message marked read."))
                 return
             if len(parts) == 3 and parts[0] == "action" and parts[2] in ("approve", "execute", "ignore"):
                 aid, verb = int(parts[1]), parts[2]
@@ -791,9 +827,12 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                         msg = f"Approved: {action['title']}"
                     else:
                         outcome = execute_action(self.ws, self.store, self.ctx, maybe_llm(), action)
-                        self.store.set_action_status(aid, "executed")
-                        self.store.record_outcome(aid, "pending", note=f"executed: {outcome[:200]}")
-                        msg = f"Executed: {action['title']} — {outcome}"
+                        if refused(outcome):
+                            msg = f"Not executed: {action['title']} — {outcome}"
+                        else:
+                            self.store.set_action_status(aid, "executed")
+                            self.store.record_outcome(aid, "pending", note=f"executed: {outcome[:200]}")
+                            msg = f"Executed: {action['title']} — {outcome}"
                 except Exception as exc:
                     self.store.set_action_status(aid, "failed")
                     msg = f"Failed: {type(exc).__name__}: {exc}"

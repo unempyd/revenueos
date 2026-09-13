@@ -43,6 +43,7 @@ def all_workers() -> dict[str, Worker]:
     from .content import ContentWorker
     from .discover import DiscoverWorker
     from .growth import GrowthWorker
+    from .heartbeat import HeartbeatWorker
     from .inbox import InboxWorker
     from .live import AdsLiveWorker, AnalyticsWorker, BillingWorker
     from .measure import MeasureWorker
@@ -51,7 +52,8 @@ def all_workers() -> dict[str, Worker]:
     from .seo import SeoWorker
 
     workers: list[Worker] = [DiscoverWorker(), OutreachWorker(), InboxWorker(), SeoWorker(), AdsAuditWorker(), ContentWorker(), MonitorWorker(),
-                             MeasureWorker(), GrowthWorker(), BillingWorker(), AnalyticsWorker(), AdsLiveWorker()]
+                             MeasureWorker(), GrowthWorker(), BillingWorker(), AnalyticsWorker(), AdsLiveWorker(),
+                             HeartbeatWorker()]
     return {w.name: w for w in workers}
 
 
@@ -66,6 +68,13 @@ def run_worker(name: str, ws: Workspace, store: Store, ctx: BusinessContext, llm
         result = WorkerResult(ok=False, summary="", error=f"{type(exc).__name__}: {exc}")
     store.finish_run(run_id, result.ok, result.summary or (result.error or ""))
     return result
+
+
+def refused(outcome: str) -> bool:
+    """An executor that could not or would not act says so in a sentence beginning "not …" ("not sent: …",
+    "not deployed: …", "not paused: …", "not booked: …"). Such an action was NOT executed and must keep its
+    status; the approval surfaces check this before stamping `executed`."""
+    return (outcome or "").strip().lower().startswith("not ")
 
 
 def execute_action(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, action: dict[str, Any]) -> str:

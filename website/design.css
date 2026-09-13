@@ -557,3 +557,8 @@ a:active,summary:active{opacity:.62}
   .faq details[open] p{animation:none}
   .stack-tag:hover,.copy:active{transform:none}
 }
+
+/* ── hero recording (page content owns the <video>; design owns its frame) ── */
+.wire-video{margin:0;max-width:100%}
+.hero-video{width:100%;height:auto;display:block;border-radius:28px;border:1px solid #424245;background:#000}
+#connects .wire{max-width:640px;margin:24px auto 0}
