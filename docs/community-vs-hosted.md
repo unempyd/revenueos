@@ -1,9 +1,10 @@
 # RevenueOS Community vs. RevenueOS Hosted
 
-RevenueOS is self-hosted software: the install is yours either way. What a paid tier adds
-is unlocked in the running software by a signed licence key, and — for the tiers above
-Pro — a set of commitments RevenueOS Inc. delivers as a hosted service around that
-software. This page draws that line explicitly.
+RevenueOS is software you run: the install is yours either way, and everything runs free
+until it has measured a result you approved, then 14 more days. What a paid tier adds is
+unlocked in the running software by a signed licence key, and — for the tiers above Pro —
+a set of things we do for you around that software, on request. This page draws that
+line explicitly.
 
 ## RevenueOS Community — free
 
@@ -60,20 +61,24 @@ Be precise about the difference, because it matters to what you're buying:
   There is no clock before you have seen a result. One-shot runs
   (`revenueos run <worker>`, `revenueos run all`) are never gated — Community can run
   every worker as often as you like by hand or from your own cron.
-- **Hosted-service commitments, not code gates:** the remaining Pro features (advanced
-  audits, historical reporting, automated monitoring, persistent memory) and everything
-  listed under Business and Agency are what RevenueOS Inc. operates and supports for you
-  as a hosted product — a control panel deployed and kept running on your behalf,
-  connectors configured and maintained, execution approved through a managed workflow,
-  a measurement history retained over time, and billing handled end to end. They are not
-  independently enforced by a second licence check in this codebase the way continuous
-  operation is; they are what you are paying RevenueOS Inc. to run and stand behind.
+- **Things we do for you, not code gates:** the remaining Pro features (advanced audits,
+  historical reporting, automated monitoring, persistent memory) and everything listed under
+  Business and Agency are what we run and support for you when you ask us to run RevenueOS
+  on your behalf — the panel kept running, connectors configured and maintained, execution
+  approved through the same approval surface, a measurement history retained over time, and
+  billing handled end to end. They are not independently enforced by a second licence check
+  in this codebase the way continuous operation is; they are what you are paying us to run
+  and stand behind. Today this is arranged by request (the "Request" links on the pricing
+  page), not by a self-serve sign-up.
 
 ## How upgrading works
 
-A checkout (`/billing/checkout?tier=pro|business|agency`, backed by Stripe) issues a
-signed licence key by email; `revenueos license install <key>` applies it to your
-workspace, verified offline against the vendor's signing secret. `revenueos license show`
+When RevenueOS has measured a result you approved, you get a Stripe payment link for the
+tier you asked for; after Stripe confirms the payment, a signed licence key is emailed to
+you and `revenueos license install <key>` applies it to your workspace, verified offline
+against the vendor's signing secret. (The `/billing/checkout?tier=…` endpoint and the
+Stripe webhook that issues keys exist in the code for a self-serve flow; they are not
+the way early-access customers pay today.) `revenueos license show`
 reports your current tier and every feature it unlocks. See
 `docs/security-and-approval.md` for how licence verification works and fails safe to
 Community.
