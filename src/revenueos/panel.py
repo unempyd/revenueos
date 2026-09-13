@@ -134,7 +134,7 @@ h2{margin:var(--sp-10) 0 var(--sp-3);font-size:21px;font-weight:600;line-height:
 /* ── controls: feedback on press, not release ── */
 form{display:inline-flex;margin:0 var(--sp-2) var(--sp-2) 0}
 .chip{margin-right:10px}
-.stepper{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 var(--sp-5)} .step{padding:6px 14px;border-radius:var(--r-pill);border:1px solid var(--line);color:var(--ink-3);font-size:13px} .step.done{color:var(--ok);border-color:var(--ok)} .step.on{color:var(--accent);border-color:var(--accent)} .step.ok{color:var(--ok);border-color:var(--ok)} .step.bad{color:#b00020;border-color:#b00020} #feed{max-height:420px;overflow:auto} a.cta{display:inline-block;padding:10px 18px;border-radius:var(--r-btn);background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600}
+.stepper{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 var(--sp-5)} .step{padding:6px 14px;border-radius:var(--r-pill);border:1px solid var(--line);color:var(--ink-3);font-size:13px} .step.done{color:var(--ok);border-color:var(--ok)} .step.on{color:var(--accent);border-color:var(--accent)} .step.ok{color:var(--ok);border-color:var(--ok)} .step.bad{color:#b00020;border-color:#b00020} #feed{max-height:420px;overflow:auto;white-space:pre-wrap;word-break:break-word} a.cta{display:inline-block;padding:10px 18px;border-radius:var(--r-btn);background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600}
 form.stack{display:block;flex:none;width:100%;margin:0 0 var(--sp-6)} form.stack input,form.stack textarea{width:100%;box-sizing:border-box} form.once{padding:var(--sp-5);border:1px solid var(--line-soft);border-radius:var(--r-card);background:var(--surface)}
 button{
   font:inherit; font-size:14px; font-weight:500; letter-spacing:-.016em;
