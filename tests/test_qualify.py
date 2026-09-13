@@ -86,7 +86,10 @@ def test_no_lead_without_a_contact_email_is_ever_counted_as_qualified(workspace,
         store.transition_lead(ghost["id"], "scored")
     # and outreach drafts only for the qualified
     r = run_worker("outreach", workspace, store, onboarded, None)
-    assert r.actions_created == 3 and store.lead_funnel()["qualified"] == 3
+    # acmeAI's only "reason" is scrape talk (forked a repo), so the lint refuses a generic email; the two with a
+    # human-written note get a draft. Qualified stays 3: refusing to email is not disqualifying.
+    assert r.actions_created == 2 and store.lead_funnel()["qualified"] == 3
+    assert r.details["rejected"] == ["acmeAI: nothing observed about this business's site; refusing a generic email"]
 
 
 def test_gate_withdraws_a_previously_drafted_lead_that_fails(workspace, store, onboarded):

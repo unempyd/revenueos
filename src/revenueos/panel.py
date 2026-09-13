@@ -35,17 +35,169 @@ except ImportError:  # pragma: no cover
     load_license = None  # type: ignore[assignment]
 
 STYLE = """
-body{font:15px/1.45 -apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:940px;margin:32px auto;padding:0 16px;color:#111;background:#fafafa}
-h1{font-size:22px;margin:0 0 4px} h2{font-size:16px;margin:28px 0 8px} .sub{color:#666;margin-bottom:20px}
-nav a{margin-right:14px;color:#333} nav{margin-bottom:20px;font-size:14px}
-.brief{background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:16px 20px;margin-bottom:24px;white-space:pre;font-family:ui-monospace,Menlo,monospace}
-.row{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:12px 16px;margin-bottom:8px}
-.t{flex:1} .t b{display:block} .t small{color:#666;white-space:pre-wrap} .type{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888}
-form{display:inline} button{border:1px solid #ccc;background:#fff;border-radius:6px;padding:6px 10px;cursor:pointer}
-button.x{background:#111;color:#fff;border-color:#111} .msg{white-space:pre-line;background:#eef6ee;border:1px solid #cde3cd;padding:10px 14px;border-radius:8px;margin-bottom:16px}
-table{border-collapse:collapse;width:100%;background:#fff} td,th{border-bottom:1px solid #eee;padding:8px;text-align:left;font-size:14px;vertical-align:top}
-.ok{color:#187a3a} .pend{color:#8a6d00} .none{color:#888}
-label{display:block;margin:12px 0 4px;font-weight:600} input,textarea{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font:inherit}
+:root{
+  color-scheme:light dark;
+  --bg:#ffffff; --surface:#ffffff; --surface-2:#f5f5f7; --canvas:#f5f5f7;
+  --ink:#1d1d1f; --ink-2:#6e6e73; --ink-3:#86868b;
+  --line:#d2d2d7; --line-soft:#e8e8ed;
+  --accent:#0066cc; --accent-ink:#ffffff;
+  --ok:#00845a; --pend:#8a6d00;
+  --chrome:rgba(255,255,255,.72);
+  --r-card:28px; --r-btn:36px; --r-pill:980px; --r-field:10px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px;
+  --ease:cubic-bezier(.32,.72,0,1);
+  --fast:140ms; --base:280ms;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#000000; --surface:#1d1d1f; --surface-2:#111113; --canvas:#000000;
+  --ink:#f5f5f7; --ink-2:#a1a1a6; --ink-3:#86868b;
+  --line:#424245; --line-soft:#2c2c2e;
+  --accent:#2997ff; --accent-ink:#000000;
+  --ok:#30d158; --pend:#ffd60a;
+  --chrome:rgba(29,29,31,.72);
+}}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--canvas); color:var(--ink);
+  font:400 17px/1.47 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,Segoe UI,Helvetica,Arial,sans-serif;
+  letter-spacing:-.022em;
+  max-width:880px; margin:0 auto;
+  padding:0 max(var(--sp-5),env(safe-area-inset-left)) var(--sp-10);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── translucent chrome; content scrolls beneath ── */
+nav{
+  position:sticky; top:0; z-index:10;
+  display:flex; gap:var(--sp-1); flex-wrap:wrap; align-items:center;
+  margin:0 calc(-1 * var(--sp-5)) var(--sp-8);
+  padding:var(--sp-3) var(--sp-5) calc(var(--sp-3) + env(safe-area-inset-top));
+  background:var(--chrome);
+  -webkit-backdrop-filter:saturate(180%) blur(20px); backdrop-filter:saturate(180%) blur(20px);
+  border-bottom:1px solid transparent;
+  animation:chrome linear both; animation-timeline:scroll(); animation-range:0 80px;
+}
+@keyframes chrome{to{border-bottom-color:var(--line-soft)}}
+nav a{
+  color:var(--ink-2); text-decoration:none; font-size:14px; font-weight:500; letter-spacing:-.01em;
+  padding:7px 12px; border-radius:var(--r-pill); margin:0;
+  transition:color var(--fast) var(--ease),background var(--fast) var(--ease);
+}
+nav a:hover{color:var(--ink);background:var(--surface-2)}
+nav a:active{transform:scale(.96)}
+
+main,.wrap{width:100%}
+h1{
+  margin:0 0 var(--sp-1);
+  font-size:clamp(30px,5vw,40px); font-weight:700; line-height:1.08; letter-spacing:-.028em;
+}
+h2{margin:var(--sp-10) 0 var(--sp-3);font-size:21px;font-weight:600;line-height:1.19;letter-spacing:-.021em}
+.sub{margin:0 0 var(--sp-8);color:var(--ink-3);font-size:17px;letter-spacing:-.022em}
+
+/* ── the numbers block: alignment is load-bearing, keep it monospace ── */
+.brief{
+  margin:0 0 var(--sp-6);
+  background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--r-card);
+  padding:var(--sp-6) var(--sp-8); white-space:pre; overflow-x:auto;
+  font:500 16px/1.75 ui-monospace,"SF Mono",Menlo,monospace;
+  font-variant-numeric:tabular-nums; font-feature-settings:"numr"; letter-spacing:0;
+  animation:rise var(--base) var(--ease) both;
+}
+
+/* ── action rows ── */
+.row{
+  margin:0 0 var(--sp-2);
+  display:flex; gap:var(--sp-3); align-items:center; flex-wrap:wrap;
+  background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--r-card);
+  padding:var(--sp-4) var(--sp-5);
+  transition:border-color var(--base) var(--ease),background var(--base) var(--ease);
+  animation:rise var(--base) var(--ease) both;
+}
+.row:nth-child(1){animation-delay:20ms}.row:nth-child(2){animation-delay:40ms}
+.row:nth-child(3){animation-delay:60ms}.row:nth-child(4){animation-delay:80ms}
+.row:nth-child(5){animation-delay:100ms}.row:nth-child(n+6){animation-delay:120ms}
+.row:hover{border-color:var(--line)}
+.t{flex:1 1 min(100%,22rem); min-width:0}
+.t b{display:block;font-size:17px;font-weight:600;line-height:1.29;letter-spacing:-.022em;margin:2px 0 4px}
+.t small{display:block;color:var(--ink-3);font-size:14px;line-height:1.5;letter-spacing:-.016em;white-space:pre-wrap}
+.type{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+
+/* ── controls: feedback on press, not release ── */
+form{display:inline-flex;margin:0 var(--sp-2) var(--sp-2) 0}
+button{
+  font:inherit; font-size:14px; font-weight:500; letter-spacing:-.016em;
+  min-height:36px; padding:8px 16px;
+  border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  border-radius:var(--r-btn); cursor:pointer;
+  transition:transform var(--fast) var(--ease),background var(--fast) var(--ease),border-color var(--fast) var(--ease);
+}
+button:hover{background:var(--surface-2)}
+button:active{transform:scale(.96)}
+button.x{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button.x:hover{filter:brightness(1.08)}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
+  outline:2px solid var(--accent); outline-offset:2px;
+}
+
+.msg{
+  margin:0 0 var(--sp-5);
+  background:var(--surface); border:1px solid var(--line-soft); border-left:3px solid var(--ok);
+  border-radius:var(--r-card); padding:var(--sp-4) var(--sp-5);
+  font-size:15px; line-height:1.5; white-space:pre-line;
+  animation:rise var(--base) var(--ease) both;
+}
+
+/* ── tables scroll rather than squash ── */
+table{
+  width:100%;border-collapse:collapse;
+  background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--r-card);
+  overflow:hidden;font-size:15px;
+}
+th{
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--ink-3);padding:var(--sp-3) var(--sp-4);text-align:left;
+  border-bottom:1px solid var(--line-soft);
+}
+td{padding:var(--sp-3) var(--sp-4);text-align:left;vertical-align:top;border-bottom:1px solid var(--line-soft);letter-spacing:-.016em}
+tr:last-child td{border-bottom:0}
+.ok{color:var(--ok);font-weight:500}.pend{color:var(--pend);font-weight:500}.none{color:var(--ink-3)}
+
+label{display:block;margin:var(--sp-5) 0 var(--sp-2);font-size:14px;font-weight:600;letter-spacing:-.016em}
+input,textarea{
+  display:block;width:100%;
+  font:inherit;font-size:16px;padding:11px 14px;
+  background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-radius:var(--r-field);
+  transition:border-color var(--fast) var(--ease);
+}
+input:focus,textarea:focus{border-color:var(--accent);outline:none}
+
+@keyframes rise{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
+
+@media (max-width:600px){
+  body{font-size:16px;padding-bottom:var(--sp-8)}
+  h1{font-size:28px}
+  .brief{padding:var(--sp-5);font-size:14px}
+  .row{padding:var(--sp-4)}
+  button{min-height:44px;flex:1 1 auto;justify-content:center}
+  form{flex:1 1 auto}
+  table{display:block;overflow-x:auto;white-space:nowrap}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0ms!important;transition-duration:.01ms!important}
+  .brief,.row,.msg{animation:none}
+  button:active{transform:none}
+}
+@media (prefers-reduced-transparency:reduce){
+  nav{background:var(--surface);-webkit-backdrop-filter:none;backdrop-filter:none;border-bottom:1px solid var(--line-soft)}
+}
+@media (prefers-contrast:more){
+  :root{--line:#000;--line-soft:#555;--ink-3:#444}
+  .row,.brief,table{border-width:1.5px}
+}
 """
 
 PAGE = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RevenueOS — {title}</title>

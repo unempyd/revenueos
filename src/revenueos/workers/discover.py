@@ -1,6 +1,9 @@
 """DISCOVER — find prospects and let the gate say which are qualified.
 
 Sources, in order:
+  0. OpenStreetMap + the business's own homepage (`discover.osm` in revenueos.yaml): local
+     businesses with a website tag in a bounding box; each homepage is read for ad tags, a
+     booking link, phone and a business email. Evidence goes into `reason` (workers/sources.py).
   1. OpenOutreach (GPL-3.0, eracle/OpenOutreach) across a process boundary: if the
      `openoutreach` CLI is installed (pip) or the container is up (services/openoutreach),
      run `openoutreach find N --json` and ingest its JSON-Lines.  Nothing from that repo is
@@ -95,7 +98,10 @@ def ingest(store: Store, rows: list[dict[str, Any]], run_id: int, default_source
             website_url=r.get("website") or None, linkedin_url=r.get("linkedin_url") or r.get("profile_url") or None,
             contact_email=(r.get("email") or None), reason=r.get("reason"),
         )
-        store.set_qualification(lead_id, verdict.qualified, verdict.reasons, score=3 if verdict.qualified else 0)
+        sig = r.get("_signals") or {}
+        score = (3 + (2 if sig.get("google_ads_tag") else 0) + (1 if sig.get("meta_pixel") else 0)
+                 + (1 if sig.get("phone_text") and not sig.get("tel_link") else 0) + (1 if sig and not sig.get("local_schema") else 0)) if verdict.qualified else 0
+        store.set_qualification(lead_id, verdict.qualified, verdict.reasons, score=score, signals=sig or None)
         if not verdict.qualified:
             continue
         qualified += 1
@@ -119,18 +125,27 @@ class DiscoverWorker:
     upstream = "eracle/OpenOutreach (process boundary), ai-sales-agent lead model"
 
     def run(self, ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, run_id: int) -> WorkerResult:
-        goal = int((ctx.config.get("discover") or {}).get("goal", 5))
+        dcfg = ctx.config.get("discover") or {}
+        goal = int(dcfg.get("goal", 5))
+        osm_rows: list[dict[str, Any]] = []
+        osm_stats: dict[str, int] = {}
+        if dcfg.get("osm"):
+            from .sources import osm_leads
+
+            osm_rows, osm_stats = osm_leads(dcfg["osm"])
         oo_rows = fetch_openoutreach(goal) if openoutreach_command() else []
         csv_rows = read_csv_drops(ws)
+        o = ingest(store, osm_rows, run_id, "osm")
         a = ingest(store, oo_rows, run_id, "openoutreach")
         b = ingest(store, csv_rows, run_id, "csv")
-        batch = {k: a[k] + b[k] for k in a}
+        batch = {k: o[k] + a[k] + b[k] for k in a}
         funnel = store.lead_funnel()
-        note = None if openoutreach_command() else "no lead source connected: drop a leads*.csv in data/exports/ or install OpenOutreach"
+        note = None if (openoutreach_command() or dcfg.get("osm")) else "no lead source connected: set discover.osm in revenueos.yaml, drop a leads*.csv in data/exports/, or install OpenOutreach"
         return WorkerResult(
             ok=True,
             summary=(f"{batch['found']} lead(s) read: {batch['contactable']} contactable, {batch['qualified']} qualified, "
                      f"{batch['created']} new. All leads: {funnel['found']} found · {funnel['contactable']} contactable · {funnel['qualified']} qualified."),
             actions_created=batch["created"],
-            details={"openoutreach_rows": len(oo_rows), "csv_rows": len(csv_rows), "batch": batch, "funnel": funnel, **({"note": note} if note else {})},
+            details={"openoutreach_rows": len(oo_rows), "csv_rows": len(csv_rows), "osm": osm_stats, "batch": batch, "funnel": funnel,
+                     **({"note": note} if note and not osm_rows else {})},
         )

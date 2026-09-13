@@ -54,6 +54,11 @@ class MonitorWorker:
         if not result.get("ok"):
             return WorkerResult(ok=False, summary="", error=str(result.get("error") or "discovery failed"))
         created = 0
+        if llm is None:
+            # recency alone is not relevance: without a model to judge the thread, nothing is put in front of the customer
+            return WorkerResult(ok=True, summary=f"0 conversation(s) worth joining; {result.get('found', 0)} candidate thread(s) found, "
+                                                 "none judged (no LLM credential — connect one to gate them).",
+                                actions_created=0, details={"found": result.get("found", 0), "gated": False, "candidates": len(result.get("items", []))})
         for item in result.get("items", []):
             url = item.get("hn_url")
             title = item.get("title") or "(untitled thread)"

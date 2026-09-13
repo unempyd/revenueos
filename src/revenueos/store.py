@@ -332,14 +332,15 @@ class Store:
             return float(row["v"])
 
     # ── drafts / sends (human-approval state machine) ───────────────────────
-    def set_qualification(self, lead_id: str, qualified: bool, reasons: list[str], score: int = 0) -> None:
+    def set_qualification(self, lead_id: str, qualified: bool, reasons: list[str], score: int = 0,
+                          signals: dict[str, Any] | None = None) -> None:
         """Record the gate's verdict. Qualified → 'scored'; not qualified → 'new' (and any pending
         draft or prospect/follow-up action for the lead is withdrawn). Leads already sent/replied/
         booked keep their status — history is never rewritten."""
         lead = self.get_lead(lead_id)
         if not lead:
             raise KeyError(lead_id)
-        notes = {"qualification": {"qualified": qualified, "reasons": reasons, "at": now()}}
+        notes = {"qualification": {"qualified": qualified, "reasons": reasons, "at": now()}, **({"signals": signals} if signals else {})}
         with self._conn() as c:
             c.execute("UPDATE leads SET score=?, notes=?, updated_at=? WHERE id=?", (score, json.dumps(notes), now(), lead_id))
         if lead["status"] in ("sent", "opened", "replied", "booked", "paused", "dead"):

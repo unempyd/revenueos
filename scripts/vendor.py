@@ -131,6 +131,12 @@ PATCHES: list[tuple[str, str, str, str]] = [
      "upstream demo/landing placeholders removed; booking_url comes from revenueos.yaml"),
     ("src/revenueos/vendor/sales_agent/render.py", r"from sales_agent\.config import settings\n", "from .settings import settings\n",
      "settings object provided by revenueos.vendor.sales_agent.settings"),
+    ("src/revenueos/vendor/sales_agent/render.py",
+     r'f"\{settings\.casl_sender_name\} · \{settings\.casl_sender_address\}\\n"',
+     'f"{settings.casl_sender_name}" + (f" · {settings.casl_sender_address}" if settings.casl_sender_address else "") + "\\n"',
+     "no dangling separator when the sender has no postal address"),
+    ("src/revenueos/vendor/sales_agent/render.py", r'        f"— \{SENDER_NAME\}\\n"\n        f"\\n"\n', "",
+     "RevenueOS drafts carry their own signature block; the vendored sign-off would duplicate it"),
 ]
 
 PATCHES += [

@@ -65,7 +65,8 @@ def test_outreach_drafts_then_dry_run_send(workspace, store, onboarded, monkeypa
     written = list(workspace.outputs.glob("email-*.txt"))
     assert len(written) == 1
     text = written[0].read_text()
-    assert "reply 'stop' to unsubscribe" in text and "— Sam Rivera" in text  # CASL footer + sender from revenueos.yaml
+    assert "reply 'stop' to unsubscribe" in text and "\nAcme Scheduling\nhttps://acme-scheduling.example" in text  # CASL footer + signature
+    assert "{" not in text and "}" not in text and "\n\nHi Maria,\n" in text
     assert store.get_lead(draft["lead_id"])["status"] == "sent"
     assert store.daily_send_count() == 1
 
@@ -178,11 +179,10 @@ def test_monitor_creates_market_signals(workspace, store, onboarded, monkeypatch
                 {"objectID": "2", "story_title": "Weave alternative?", "comment_text": "looking to switch", "points": 3, "created_at": "2026-09-11T10:00:00Z"}]
 
     monkeypatch.setattr(discovery, "_hn_search", fake_hn)
+    # without an LLM nothing is judged relevant, so nothing reaches the customer (recency is not relevance)
     r = run_worker("monitor", workspace, store, onboarded, None)
-    assert r.ok and r.actions_created == 2 and r.details["gated"] is False, r
-    sig = store.list_actions("pending", "market_signal")
-    assert {a["source_url"] for a in sig} == {"https://news.ycombinator.com/item?id=1", "https://news.ycombinator.com/item?id=2"}
-    assert run_worker("monitor", workspace, store, onboarded, None).actions_created == 0
+    assert r.ok and r.actions_created == 0 and r.details["gated"] is False and r.details["candidates"] == 2, r
+    assert store.list_actions("pending", "market_signal") == [] and "none judged" in r.summary
 
 
 def test_content_matches_channels_to_skills(workspace, store, onboarded):
@@ -253,3 +253,14 @@ def test_content_deliverable_sentence_strips_model_instructions():
     assert deliverable_sentence('Use when the user mentions "build programmatic SEO pages", "generate pages at scale", or "template pages".') == \
         "build programmatic SEO pages and generate pages at scale"
     assert ALIAS_RE.search("Compatibility skill for seo-google. Use when a user or upstream workflow invokes this name; route the task to `seo-audit`")
+
+
+def test_outreach_observation_needs_a_defect_and_names_the_spend():
+    lead = {"business_name": "Glow", "website_url": "https://www.glow.example/", "reason":
+            "hairdresser in Example Suburb (OpenStreetMap); ad/analytics tags on the site: Meta Pixel, GA4; online booking link; business email published on the site: hello@glow.example; phone shown but not tappable; no LocalBusiness schema"}
+    kind, text = outreach.observation(lead)
+    assert kind == "phone" and text.startswith("glow.example is set up for Meta ads (there is a Meta Pixel on it), so you are paying") and "GA4" not in text
+    ads_only = {**lead, "reason": "cafe in Adelaide (OpenStreetMap); ad/analytics tags on the site: Meta Pixel; business email published on the site: a@b.example"}
+    assert outreach.observation(ads_only) is None  # nothing to fix → no email
+    scrape = {**lead, "reason": "forked marketingskills; profile lists company Glow; 12 public repos, 2 followers"}
+    assert outreach.observation(scrape) is None

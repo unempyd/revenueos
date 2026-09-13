@@ -60,10 +60,8 @@ def render_cold_text(draft: EmailDraft, lead: Lead) -> str:
     return (
         f"{draft.body.rstrip()}\n"
         f"\n"
-        f"— {SENDER_NAME}\n"
-        f"\n"
         f"---\n"
-        f"{settings.casl_sender_name} · {settings.casl_sender_address}\n"
+        f"{settings.casl_sender_name}" + (f" · {settings.casl_sender_address}" if settings.casl_sender_address else "") + "\n"
         f"reply 'stop' to unsubscribe\n"
     )
 

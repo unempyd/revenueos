@@ -28,34 +28,93 @@ from ..vendor.sales_agent.recipes import Hook, Recipe
 from ..vendor.sales_agent.render import render_cold_text
 from . import WorkerResult
 
-MODEL_TEMPLATE = "template-v1"
+MODEL_TEMPLATE = "template-v2"
+
+# Text that must never reach a recipient: unrendered placeholders, canon scaffolding, scrape vocabulary.
+FORBIDDEN = (
+    "{", "}", "[derived", "[hypothesis", "[from the website", "one sentence.", "two to three sentences", "write approved",
+    "state the ", "list phrases", "use bullets only", "public repos", "followers", "forked ", "stargazer", "github profile",
+    "lorem", "todo", "tbd", "xxxx", "<insert", "[insert",
+)
+SCAFFOLD_LINE = ("- what ", "- who ", "- how ", "- where ", "- when ", "- optional", "- specific events", "- signs they", "- common concerns")
+
+
+class DraftRejected(ValueError):
+    """The draft is not fit to send; the reason names the offending text."""
+
+
+def lint_draft(subject: str, body: str) -> None:
+    text = f"{subject}\n{body}"
+    low = text.lower()
+    for bad in FORBIDDEN:
+        if bad in low:
+            raise DraftRejected(f"forbidden text {bad!r}")
+    for line in body.splitlines():
+        if line.strip().lower().startswith(SCAFFOLD_LINE):
+            raise DraftRejected(f"canon scaffolding line {line.strip()[:40]!r}")
+    if len(subject.strip()) < 8 or len(subject) > 90:
+        raise DraftRejected("subject length")
+    if len(body.split()) < 40 or len(body.split()) > 220:
+        raise DraftRejected(f"body length {len(body.split())} words")
+    if not any(g in body[:40] for g in ("Hi ", "Hello ", "Dear ")):
+        raise DraftRejected("no greeting")
+
+
+def _clean(text: str) -> str:
+    """Strip our own provenance tags before anything is said to a customer."""
+    import re
+
+    return re.sub(r"\s*\[(?:derived|hypothesis|from the website)[^\]]*\]", "", text or "").strip()
+
+
+def observation(lead: dict[str, Any]) -> tuple[str, str] | None:
+    """(kind, sentence): one specific, observed thing about THEIR site, from the evidence the lead source recorded.
+    Ad tags alone are context, not an insight; without a defect to point at there is nothing to say."""
+    reason = _clean(lead.get("reason") or "")
+    if "OpenStreetMap" not in reason and "on the site" not in reason:
+        # a human-written qualification note ("3-chair clinic, posts about no-shows") is a specific observation too
+        if reason and not any(bad in reason.lower() for bad in ("forked", "followers", "public repos", "profile lists", "starred")):
+            return "note", f"One thing that stood out: {reason.rstrip('.')}."
+        return None
+    parts = [p.strip() for p in reason.split(";")]
+    site = (lead.get("website_url") or "").removeprefix("https://").removeprefix("http://").removeprefix("www.").rstrip("/")
+    tags = next((p for p in parts if p.startswith("ad/analytics tags on the site: ")), "")
+    spend = []
+    if "Meta Pixel" in tags:
+        spend.append("Meta ads (there is a Meta Pixel on it)")
+    if "Google Ads tag" in tags:
+        spend.append("Google Ads (there is a Google Ads conversion tag on it)")
+    lead_in = f"{site} is set up for {' and '.join(spend)}, so you are paying to bring people to the page, but " if spend else f"On {site}, "
+    if any(p == "phone shown but not tappable" for p in parts):
+        return "phone", lead_in + "the phone number is plain text: a visitor on a phone cannot tap it to call you."
+    if any(p == "no LocalBusiness schema" for p in parts):
+        return "schema", lead_in + "the page carries no LocalBusiness markup, so Google is not told your business type, address and hours for local results."
+    return None
 
 
 def build_recipe(ctx: BusinessContext) -> Recipe:
-    """One Recipe with 2–3 Hooks derived from the canon (offer, differentiators, pain points)."""
+    """One hook, written for the owner of a small business. The opener is filled per lead from what was
+    observed on their site; nothing in the body comes from an unfilled canon section."""
     company = ctx.company_name
-    offer = ctx.section("offer.md", "Core Offer") or ctx.manifest.get("core_offer", "")
-    outcome = ctx.section("offer.md", "Outcome Statement")
-    diff = ctx.section("messaging.md", "Differentiators")
-    one_liner = ctx.section("messaging.md", "One-Liner") or ctx.section("identity.md", "One-Sentence Definition")
-    pains = ctx.section("audience.md", "Pain Points")
+    site = ctx.website or ""
     booking = ctx.config.get("booking_url") or ""
-    cta = f"Worth a 15-minute look? {booking}" if booking else "Worth a 15-minute look this week?"
-    hooks = [
-        Hook(
-            name="problem_first",
-            subjects=("quick question about {shop_name}", "{shop_name} + " + company),
-            opener="Noticed {shop_name} — {reason}.",
-            body=f"{pains.splitlines()[0] if pains else 'Most teams like yours hit the same wall.'}\n\n{one_liner}\n\n{cta}",
-        ),
-        Hook(
-            name="offer_first",
-            subjects=("an idea for {shop_name}", "{shop_name}: " + (outcome.splitlines()[0][:60] if outcome else "a shortcut")),
-            opener="Hi — writing because {reason}.",
-            body=f"{offer}\n\n{diff.splitlines()[0] if diff else ''}\n\n{cta}".strip(),
-        ),
-    ]
-    return Recipe(key="revenueos-default", hooks=tuple(hooks))
+    ask = f"Worth 15 minutes this week? {booking}".strip() if booking else "If that is worth 15 minutes this week, reply and the full list comes back the same day."
+    signer = (ctx.config.get("sender") or {}).get("signature")
+    intro = f"I run {company}," if signer else f"{company} is"
+    body = (
+        f"{intro} a small tool that reads a business's website and ads, lists the specific things costing it "
+        "customers, and fixes the ones you approve. Every fix is re-checked afterwards so you can see whether it changed anything.\n\n"
+        f"For {{shop_name}} the full list is ready. We are in early access: we set it up and run it, you approve each "
+        "change, and you pay nothing until the first measured result.\n\n"
+        f"{ask}"
+    )
+    hooks = [Hook(
+        name="observed_first",
+        subjects=("{shop_name}: one thing costing you calls", "{shop_name}: what Google can't read on your site", "quick note about {shop_name}'s website"),
+        opener="Hi {first_name},\n\nI had a look at {shop_name}'s website this week. {observation}",
+        body=body,
+    )]
+    return Recipe(key="revenueos-observed", hooks=tuple(hooks))
 
 
 def pick(lead_id: str, n: int, salt: str = "") -> int:
@@ -64,24 +123,34 @@ def pick(lead_id: str, n: int, salt: str = "") -> int:
     return int(digest, 16) % max(1, n)
 
 
+def signature(ctx: BusinessContext) -> str:
+    """A person's name when the owner set sender.signature, otherwise the company; the site on its own line."""
+    sender = ctx.config.get("sender") or {}
+    name = (sender.get("signature") or "").strip()
+    site = ctx.website or ""
+    lines = [name, ctx.company_name] if name and name != ctx.company_name else [ctx.company_name]
+    if site:
+        lines.append(site)
+    return "\n".join(lines)
+
+
 def draft_for(lead: dict[str, Any], recipe: Recipe, llm: LLM | None, ctx: BusinessContext) -> tuple[str, str, str, str]:
+    """Deterministic: no LLM in the body. Raises DraftRejected when there is nothing observed to say."""
     hook = recipe.hooks[pick(lead["id"], len(recipe.hooks), "hook")]
-    subject_tpl = hook.subjects[pick(lead["id"], len(hook.subjects), "subject")]
-    shop = lead.get("business_name") or "your team"
-    reason = (lead.get("reason") or "you look like a fit for what we do").rstrip(".")
+    shop = _clean(lead.get("business_name") or "")
+    if not shop:
+        raise DraftRejected("no business name")
+    found = observation(lead)
+    if not found:
+        raise DraftRejected("nothing observed about this business's site; refusing a generic email")
+    kind, obs = found
+    subject_tpl = {"phone": hook.subjects[0], "schema": hook.subjects[1]}.get(kind, hook.subjects[2])
+    first = (lead.get("first_name") or "").strip()
+    greeting_name = first or f"{shop} team"
     subject = subject_tpl.format(shop_name=shop)
-    opener = hook.opener.format(shop_name=shop, reason=reason)
-    if llm is not None:
-        try:
-            opener = llm.ask(
-                "You write the first sentence of a cold email. Plain, specific, no flattery, no em dashes, under 25 words. "
-                "Output the sentence only.\n\n" + ctx.prompt_summary(2500),
-                f"Prospect: {shop}. Title: {lead.get('title') or 'unknown'}. Why they qualify: {reason}. Website: {lead.get('website_url') or 'n/a'}.",
-                max_tokens=200,
-            ).strip().splitlines()[0]
-        except Exception:
-            pass
-    body = f"{opener}\n\n{hook.body.format(shop_name=shop, reason=reason)}"
+    opener = hook.opener.format(shop_name=shop, first_name=greeting_name, observation=obs)
+    body = f"{opener}\n\n{hook.body.format(shop_name=shop)}\n\n{signature(ctx)}"
+    lint_draft(subject, body)
     return hook.name, subject_tpl, subject, body
 
 
@@ -96,6 +165,7 @@ class OutreachWorker:
         recipe = build_recipe(ctx)
         limit = int((ctx.config.get("outreach") or {}).get("drafts_per_run", 10))
         created, skipped = 0, 0
+        rejected: list[str] = []
         # only leads the gate qualified ('scored'); 'new' means found-but-not-qualified
         candidates = [l for l in store.list_leads() if l["status"] == "scored" and (l.get("contact_email") or "").strip()]
         for lead in candidates[:limit]:
@@ -103,17 +173,21 @@ class OutreachWorker:
             if not email or store.is_unsubscribed(email):
                 skipped += 1
                 continue
-            hook_name, variant, subject, body = draft_for(lead, recipe, llm, ctx)
-            draft_id = store.create_draft(lead["id"], f"{recipe.key}/{hook_name}", variant, subject, body,
-                                          MODEL_TEMPLATE if llm is None else f"{MODEL_TEMPLATE}+{llm.model}")
+            try:
+                hook_name, variant, subject, body = draft_for(lead, recipe, llm, ctx)
+            except DraftRejected as e:
+                rejected.append(f"{lead.get('business_name')}: {e}")
+                continue
+            draft_id = store.create_draft(lead["id"], f"{recipe.key}/{hook_name}", variant, subject, body, MODEL_TEMPLATE)
             aid = store.create_action(
                 "follow_up", f"Send to {email} — {subject}", body,
                 run_id=run_id, dedupe_key=f"draft:{draft_id}",
                 context={"executor": "send_email", "draft_id": draft_id, "lead_id": lead["id"], "to": email, "hook": hook_name},
             )
             created += 1 if aid else 0
-        return WorkerResult(ok=True, summary=f"{created} email draft(s) waiting for your approval; {skipped} lead(s) skipped (no email or unsubscribed).",
-                            actions_created=created, details={"candidates": len(candidates), "skipped": skipped})
+        return WorkerResult(ok=True, summary=f"{created} email draft(s) waiting for your approval; {skipped} lead(s) skipped (no email or unsubscribed); "
+                                              f"{len(rejected)} draft(s) refused by the lint.",
+                            actions_created=created, details={"candidates": len(candidates), "skipped": skipped, "rejected": rejected})
 
 
 # ── execution (only after approval) ───────────────────────────────────────────

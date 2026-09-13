@@ -53,7 +53,7 @@ SIGNAL_PATTERNS = {
     "tel_link": r"href=[\"']tel:",
     "mailto_link": r"href=[\"']mailto:",
     "booking_link": r"href=[\"'][^\"']*(?:book|appointment|reserve|schedule)[^\"']*[\"']",
-    "phone_text": r"(?:\+\d{1,3}[ \-]?(?:\(\d{1,4}\)[ \-]?)?\d(?:[ \-]?\d){6,11}|\(?0\d{1,3}\)?(?:[ \-]?\d){7,9})",
+    "phone_text": r"(?:\+[1-9]\d{0,2}[ \-]?(?:\(\d{1,4}\)[ \-]?)?\d(?:[ \-]?\d){6,11}|\(?0\d{1,3}\)?(?:[ \-]?\d){7,9})",
     "meta_pixel": r"connect\.facebook\.net/[a-z_]+/fbevents\.js|fbq\(\s*['\"]init",
     "google_ads_tag": r"AW-\d{6,}|googleadservices\.com/pagead/conversion",
     "ga4": r"\bG-[A-Z0-9]{6,}\b",
@@ -89,14 +89,18 @@ def parse_signals(html: str, url: str) -> dict[str, Any]:
     out: dict[str, Any] = {"ok": True, "url": url}
     for name, pattern in SIGNAL_PATTERNS.items():
         out[name] = bool(re.search(pattern, html, re.I))
-    visible = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", html)  # never read phone digits out of a pixel id
-    text = html_mod.unescape(re.sub(r"<[^>]+>", " ", visible))
+    # Site builders (GoDaddy, Wix) render the visible page from JSON inside <script>, so scan the whole
+    # document as text (no tag stripping: a "<" inside a script would swallow the number). The digit
+    # boundaries keep a 15-digit pixel id from looking like a phone number; "+0…" is a CSS unicode range.
+    text = html_mod.unescape(html).replace("\\u002B", "+")
+    text = re.sub(r"[\u00a0\u2007\u202f\u2009]", " ", text)  # non-breaking and thin spaces inside numbers
     phones = []
     for m in re.finditer(r"(?<!\d)" + SIGNAL_PATTERNS["phone_text"] + r"(?!\d)", text):
         ph = re.sub(r"\s+", " ", m.group(0)).strip()
         if sum(ch.isdigit() for ch in ph) >= 8 and ph not in phones:
             phones.append(ph)
-    out["phones"] = phones[:4]
+    intl = [ph for ph in phones if ph.startswith("+")]
+    out["phones"] = (intl or phones)[:3]  # a site that prints its country code is telling you which numbers are its own
     m = re.search(SIGNAL_PATTERNS["booking_link"], html, re.I)
     out["booking_url"] = re.search(r"href=[\"']([^\"']+)", m.group(0), re.I).group(1) if m else None
     out["emails"] = sorted({e.lower() for e in re.findall(r"mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", html, re.I)})[:4]
