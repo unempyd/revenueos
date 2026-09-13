@@ -1,0 +1,30 @@
+name: "RevenueOS demo"
+description: "Run RevenueOS on any website from GitHub: what is costing it customers, and which fixes RevenueOS would deploy itself. Nothing is stored."
+author: "RevenueOS"
+branding:
+  icon: "activity"
+  color: "blue"
+inputs:
+  url:
+    description: "The website to read (https://…)"
+    required: true
+  version:
+    description: "revenueos version to install from PyPI"
+    required: false
+    default: ""
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - shell: bash
+      run: |
+        if [ -n "${{ inputs.version }}" ]; then pip install -q "revenueos==${{ inputs.version }}"; else pip install -q revenueos; fi
+    - shell: bash
+      env:
+        REVENUEOS_LLM: "off"
+      run: |
+        set -o pipefail
+        revenueos demo "${{ inputs.url }}" --no-llm | tee demo.txt
+        { echo "## RevenueOS demo — ${{ inputs.url }}"; echo; echo '```'; cat demo.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

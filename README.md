@@ -46,6 +46,16 @@ RevenueOS demo — Example Business® (https://example.com)
   3 finding(s). Everything above runs free, every day, once connected. You pay only when you agree with a measured result.
 ```
 
+### Run the demo from GitHub, no install
+
+Add one step to any workflow and read the job summary:
+
+```yaml
+- uses: unempyd/revenueos@main
+  with:
+    url: https://yoursite.com
+```
+
 ## Connect once
 
 ```bash
