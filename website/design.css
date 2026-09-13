@@ -90,7 +90,15 @@ header.topnav{
 header.topnav.is-scrolled{border-bottom-color:var(--smoke)}
 .topnav .row{display:flex;align-items:center;gap:16px;padding-block:12px;flex-wrap:nowrap}
 .brand{font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--frost);gap:9px}
-.brand .dot{width:9px;height:9px;border-radius:var(--r-pill);background:var(--blue)}
+/* The mark is masked, not drawn: it takes `currentColor`, so it is frost on this black
+   header and ink anywhere the ground is light — one file, both semantics, no second asset.
+   logo-mark.svg is the 8-element cut; the full 24-element logo.svg turns to mush under
+   about 40px, the same optical-size reasoning type gets. */
+.brand .dot{
+  width:20px;height:20px;border-radius:0;background:currentColor;
+  -webkit-mask:url(logo-mark.svg) center/contain no-repeat;
+  mask:url(logo-mark.svg) center/contain no-repeat;
+}
 nav.links{display:flex;gap:2px;margin-inline:auto;flex-wrap:nowrap}
 nav.links a{
   font-size:12px;font-weight:400;letter-spacing:-.01em;color:var(--frost);opacity:.82;
@@ -607,4 +615,13 @@ a:active,summary:active{opacity:.62}
   .wire svg.wide{display:none}
   .wire svg.narrow{display:block;max-width:320px;margin-inline:auto}
   #connects .wire figcaption{margin-inline:auto}
+}
+
+/* The footer is the one place with room for the full 24-element mark: masked like the
+   header's, so it too is currentColor and needs no light-ground twin. */
+.foot-mark{
+  display:block;width:56px;height:56px;margin-bottom:16px;
+  background:currentColor;opacity:.7;
+  -webkit-mask:url(logo.svg) center/contain no-repeat;
+  mask:url(logo.svg) center/contain no-repeat;
 }

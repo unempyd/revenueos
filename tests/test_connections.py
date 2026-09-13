@@ -210,6 +210,26 @@ def test_google_ads_keyword_search_term_and_negative_reads(workspace, monkeypatc
     assert {a["campaign_id"] for a in negs["list_campaigns"]} == {"11", "12"}
 
 
+def test_google_ads_says_what_is_missing_instead_of_failing_at_the_api(workspace, monkeypatch):
+    """The common case: a business connected Google for Search Console and GA4, which is what
+    DEFAULT_SCOPES asks for, and then a worker reaches for Ads. Google would answer 401; the
+    customer needs the sentence that names the fix."""
+    cs = ConnectionStore(workspace)
+    _google_conn(cs, ["https://www.googleapis.com/auth/webmasters.readonly", "https://www.googleapis.com/auth/analytics.readonly"])
+    monkeypatch.setenv("GOOGLE_ADS_DEVELOPER_TOKEN", "dev")
+    for call in (google.ads_campaigns, google.ads_keywords, google.ads_search_terms, google.ads_negative_keywords):
+        with pytest.raises(PermissionDenied, match="was not granted"):
+            call(cs)
+
+    # scope granted, developer token missing: the other half of the prerequisite, said as plainly
+    cs.put(Connection(provider="google", account="o@b.example", scopes=["https://www.googleapis.com/auth/adwords"],
+                      secrets={"tokens": {"access_token": "at", "expires_in": 3600, "obtained_at": 10**12}},
+                      meta={"ads_customer_id": "123-456-7890"}))
+    monkeypatch.delenv("GOOGLE_ADS_DEVELOPER_TOKEN")
+    with pytest.raises(PermissionDenied, match="developer token from the API Centre"):
+        google.ads_keywords(cs)
+
+
 # ── Meta ──────────────────────────────────────────────────────────────────────
 def test_meta_campaigns_waste_and_pause(workspace):
     cs = ConnectionStore(workspace)

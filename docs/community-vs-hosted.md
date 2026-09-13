@@ -26,7 +26,9 @@ Community has no time limit, no seat limit, and no feature countdown. It is not 
 ## What a licence unlocks in the running software
 
 This is `TIER_FEATURES` from the licensing code, exactly as shipped — what each paid tier
-adds on top of everything below it:
+adds on top of everything below it. Read it as a price list, not a feature inventory: several
+of these names describe work we would do for you, and the Business and Agency ones describe
+software that **does not exist yet** (see the next section).
 
 **Pro — $99/month**
 - Continuous operation via the orchestrator (cron scheduling, always-on)
@@ -61,15 +63,23 @@ Be precise about the difference, because it matters to what you're buying:
   There is no clock before you have seen a result. One-shot runs
   (`revenueos run <worker>`, `revenueos run all`) are never gated — Community can run
   every worker as often as you like by hand or from your own cron.
-- **Things we do for you, not code gates:** the remaining Pro features (advanced audits,
-  historical reporting, automated monitoring, persistent memory) and everything listed under
-  Business and Agency are what we run and support for you when you ask us to run RevenueOS
-  on your behalf — the panel kept running, connectors configured and maintained, execution
-  approved through the same approval surface, a measurement history retained over time, and
-  billing handled end to end. They are not independently enforced by a second licence check
-  in this codebase the way continuous operation is; they are what you are paying us to run
-  and stand behind. Today this is arranged by request (the "Request" links on the pricing
-  page), not by a self-serve sign-up.
+- **Built, but not gated:** the remaining Pro names describe things Community already has in
+  full — the 414-control ads audit and the SEO audit run for everyone, every measured outcome is
+  kept in the workspace database, `monitor` and the orchestrator schedule are available to
+  everyone, and corrections are injected for the last 30 days on every tier. Paying for Pro buys
+  continuous operation and our support for it, not access to those.
+- **Not built yet:** everything listed under Business and Agency. RevenueOS runs one business per
+  install today; multi-brand workspaces, multiple users, CRM sync, centralised analytics, client
+  fleets, white-label reports and a documented API do not exist, and no licence check gates them
+  because there is nothing to gate. A workspace per client (`revenueos workspace new`) and the
+  multi-tenant panel are the closest things that work, and both are free. Do not buy those tiers
+  expecting the list; ask us what is real before paying.
+- **Things we do for you, not code gates:** running RevenueOS on your behalf when you ask — the
+  panel kept running, connectors configured and maintained, execution approved through the same
+  approval surface, a measurement history retained over time, and billing handled end to end.
+  None of it is enforced by a second licence check the way continuous operation is; it is what
+  you are paying us to run and stand behind. Today it is arranged by request (the "Request"
+  links on the pricing page), not by a self-serve sign-up.
 
 ## How upgrading works
 

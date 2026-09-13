@@ -154,6 +154,7 @@
 @keyframes load{0%{transform:translateX(-100%)}55%,100%{transform:translateX(0)}}
 @media (prefers-reduced-motion:reduce){.agent em::after{animation:none}}
 </style>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="design.css">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "RevenueOS", "url": "https://unempyd.github.io/revenueos/", "description": "We give small businesses a self-hosted revenue department that finds opportunities, executes approved revenue work, and measures what happened."}</script>
 <link rel="canonical" href="https://unempyd.github.io/revenueos/">
@@ -528,7 +529,9 @@ $0 pipeline generated</pre>
           <li>CRM synchronization</li>
           <li>Approval controls &amp; centralized analytics</li>
         </ul>
-        <div class="tier-note">Run it yourself or ask us to run it for you; the same pay-after-an-agreed-result rule applies.</div>
+        <div class="tier-note"><b>Not built yet.</b> Today RevenueOS runs one business per install, and
+          nothing in the software gates these. Tell us you want them and we will say where they are; do not
+          pay for this tier expecting them now.</div>
         <a class="cta-btn ghost" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+business">Request Business</a>
       </div>
 
@@ -541,7 +544,9 @@ $0 pipeline generated</pre>
           <li>White-label reports &amp; client workspaces</li>
           <li>Full API access</li>
         </ul>
-        <div class="tier-note">Run it yourself or ask us to run it for you; the same pay-after-an-agreed-result rule applies.</div>
+        <div class="tier-note"><b>Not built yet.</b> One workspace per client already works
+          (<code>revenueos workspace new</code>), but fleets, white-label reports and a documented API do
+          not exist yet and nothing in the software gates them.</div>
         <a class="cta-btn ghost" href="https://github.com/unempyd/revenueos/issues/new?template=hosted-access.yml&title=Hosted+access%3A+agency">Request Agency</a>
       </div>
     </div>
@@ -700,8 +705,8 @@ revenueos serve                    <span class="c1"># the control panel: http://
 </section>
 <footer>
   <div class="wrap foot-row">
-    <div>© 2026 RevenueOS. Open-source core (MIT). Nothing sends, publishes or spends
-      without your approval.</div>
+    <div><span class="foot-mark" aria-hidden="true"></span>© 2026 RevenueOS. Open-source core (MIT).
+      Nothing sends, publishes or spends without your approval.</div>
     <div class="foot-links">
       <a href="pricing.html">Pricing</a>
       <a href="#install">Install</a>

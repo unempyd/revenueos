@@ -33,9 +33,9 @@ Specific guardrails on the one path that can send mail:
 
 ## Credentials
 
-Nothing that can act on your behalf — an API key, a mailbox password, a signing secret —
-is ever stored in the workspace (the company-context canon, `revenueos.yaml`, or the
-database). All of it comes from the process environment, which you control:
+Provider keys, mailbox passwords and signing secrets come from the process environment, which
+you control, and are never written to the company-context canon, `revenueos.yaml`, or the
+database:
 
 | Variable | What it unlocks |
 |---|---|
@@ -52,6 +52,22 @@ database). All of it comes from the process environment, which you control:
 
 `revenueos doctor` and `revenueos tools` both report what is configured without ever
 printing a secret value.
+
+### The exception: connections
+
+A **connection** is an account you authorise once, and its proof has to outlive the process
+that obtained it, so it is the one credential RevenueOS stores. `data/connections.json` holds
+one record per provider — a Stripe secret key, Google and Meta OAuth access/refresh tokens, a
+WordPress application password — written with mode 600.
+
+Set `REVENUEOS_TOKEN_KEY` and those secrets are Fernet-encrypted at rest, and
+`revenueos connections` tells you which state you are in. **Without that variable they are
+plaintext in the file**, protected only by file permissions: anything running as your user, any
+backup, and any sync client that reaches the workspace can read them. Set it, or accept that.
+
+Two things bound the damage rather than prevent the read: the scopes the provider granted, and
+`allow_write`, which is off until you turn it on, so a stolen read-only token cannot change
+anything through RevenueOS. Revoke at the provider, then `revenueos disconnect <provider>`.
 
 ## Panel authentication
 

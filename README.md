@@ -30,8 +30,10 @@ pip install revenueos
 revenueos demo https://yoursite.com
 ```
 
-No account, nothing stored. It prints what is costing the site customers and which of those
-fixes RevenueOS deploys itself once connected. Run on the neutral example domain, exactly as
+No account, and nothing is kept: the demo builds a workspace in a temporary directory and
+deletes it before it exits. (If a model is configured, the pages it reads are sent to that
+provider; `--no-llm` keeps it entirely local.) It prints what is costing the site customers and
+which of those fixes RevenueOS deploys itself once connected. Run on the neutral example domain, exactly as
 printed:
 
 ```
@@ -132,9 +134,15 @@ uv sync && (cd orchestrator && npm install)
 uv run revenueos init
 ```
 
-Requirements: Python 3.12+, Node 20+ (scheduler and connector CLIs). An LLM is optional:
-RevenueOS uses `ANTHROPIC_API_KEY` if set, otherwise a signed-in Claude Code CLI; without
-either, every worker still runs its deterministic checks.
+Requirements: Python 3.12+, Node 20+ (scheduler and connector CLIs). An LLM is used if
+present — `ANTHROPIC_API_KEY`, otherwise a signed-in Claude Code CLI. Without either, the
+deterministic half of the product still runs: the site crawl and its findings, the ad-export
+waste, pacing and concentration checks, search-term waste, lead qualification, inbox replies
+and bounces, templated outreach drafts, content matching, and all measurement. What does need
+a model, and says so rather than pretending: executing any action whose executor is
+`run_skill` (the SEO, content and ads deliverables), the 414-control ads audit, `monitor`'s
+relevance gate, and the specialist roles. Site deploys, campaign pauses, invoices, bookings
+and email sends need no model.
 
 ## Workers
 
@@ -180,17 +188,24 @@ panel, connections and executors, the capability packs (13 packs, 790 skills, 10
 CLIs), the MCP server and the Claude Code plugin — free until RevenueOS has measured a result you
 approved, then 14 more days.
 
-**RevenueOS Pro / Business / Agency** ($99 / $299 / $999 per month): keeps continuous operation on
-after that, and adds several brands under one install (Business) or client workspaces (Agency). Run it
-yourself, or ask us to run it for you. A signed licence key, emailed after payment, unlocks the tier.
+**RevenueOS Pro** ($99/month) keeps continuous operation on after that. A signed licence key,
+emailed after payment, unlocks it. That is the whole difference in the software today: the licence
+check gates one thing, `revenueos orchestrator` running continuously. **Business and Agency**
+($299 / $999 per month) are the arrangement under which we run and support RevenueOS for you;
+the multi-brand, multi-user and fleet features named on the pricing page are **not built yet**
+and nothing in this repository gates them. Ask before paying for those.
 Details: [docs/community-vs-hosted.md](docs/community-vs-hosted.md).
 
 ## Security and approval
 
-Workers never send, publish or spend. Only an approved Execute does, and it is bounded by a
-daily send cap, a suppression list, `List-Unsubscribe` and reply-STOP handling. Credentials
-live in the environment, never in the workspace. The panel refuses to bind a public address
-without a password. See [docs/security-and-approval.md](docs/security-and-approval.md) and
+Workers never send, publish or spend — they only write actions. Only an approved Execute acts,
+and it is bounded by a daily send cap, a suppression list, `List-Unsubscribe` and reply-STOP
+handling. Provider keys and mailbox passwords come from the environment and are never written
+to the workspace. The one exception is a **connection** you authorise: its tokens (a Stripe
+key, Google/Meta OAuth tokens, a WordPress application password) are stored in
+`data/connections.json` at mode 600, and are encrypted at rest only when you set
+`REVENUEOS_TOKEN_KEY` — without it they are readable by anything that can read the file. The
+panel refuses to bind a public address without a password. See [docs/security-and-approval.md](docs/security-and-approval.md) and
 [SECURITY.md](SECURITY.md).
 
 ## Integrations

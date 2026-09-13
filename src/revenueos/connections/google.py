@@ -30,7 +30,9 @@ def describe() -> dict[str, Any]:
         "reads": "search queries and pages (Search Console), sessions and conversions (GA4), campaigns, keywords, search terms and negative keywords (Google Ads)",
         "writes": "book a call on your calendar; pause a campaign or change its daily budget (needs 'allow changes')",
         "needs": "an OAuth client (GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET); Google Ads also needs GOOGLE_ADS_DEVELOPER_TOKEN and GOOGLE_ADS_CUSTOMER_ID",
-        "how": "revenueos connect google  (opens the consent page in your browser)",
+        "how": ("revenueos connect google  (opens the consent page in your browser). Google Ads is opt-in: add "
+                "--scopes identity,searchconsole.read,analytics.read,calendar.write,ads.read, and set "
+                "GOOGLE_ADS_DEVELOPER_TOKEN and GOOGLE_ADS_CUSTOMER_ID."),
     }
 
 
@@ -146,9 +148,19 @@ def book_call(store: ConnectionStore, *, attendee_email: str, subject: str, star
 
 # ── Google Ads ────────────────────────────────────────────────────────────────
 def _ads_headers(store: ConnectionStore, conn: Connection, client: httpx.Client | None) -> dict[str, str]:
+    # Every Google Ads call comes through here, so this is where a missing prerequisite gets a
+    # sentence instead of a raw 401 from Google. `adwords` is deliberately not in DEFAULT_SCOPES:
+    # most businesses connect Google for Search Console and GA4 and never touch Ads, and asking
+    # for it changes what Google requires of the OAuth client.
+    if not _has(conn, "adwords"):
+        raise PermissionDenied(
+            "Google Ads was not granted on this connection. Reconnect asking for it: "
+            "revenueos connect google --scopes identity,searchconsole.read,analytics.read,calendar.write,ads.read")
     dev = os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN")
     if not dev:
-        raise PermissionDenied("Google Ads needs GOOGLE_ADS_DEVELOPER_TOKEN")
+        raise PermissionDenied(
+            "Google Ads needs GOOGLE_ADS_DEVELOPER_TOKEN — a developer token from the API Centre of a Google Ads "
+            "manager account. A Google account with no Google Ads account cannot have one.")
     h = _bearer(store, conn, client)
     h["developer-token"] = dev
     login = os.environ.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID")

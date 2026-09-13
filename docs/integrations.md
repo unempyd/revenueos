@@ -47,6 +47,14 @@ Refresh happens on demand and the refreshed token is written back.
   TODAY, Connections and Spend.
 - **Google and Meta adapters**: every request shape exercised against mocked endpoints in
   `tests/test_connections.py`; live use waits on the OAuth client / app the owner registers once.
+- **Google Ads specifically, still unproven live.** The campaign, keyword, search-term and
+  negative-keyword reads have only ever run against mocked request shapes. Two things gate a live
+  run, and neither is code: the `adwords` scope is not in `DEFAULT_SCOPES`, so it must be asked for
+  (`revenueos connect google --scopes identity,searchconsole.read,analytics.read,calendar.write,ads.read`);
+  and a developer token comes from the API Centre of a Google Ads **manager** account, which a Google
+  account with no Google Ads account cannot have — test access reaches only test accounts, and basic
+  access needs a review that takes days. Until then `ads-live` refuses with the sentence that names
+  whichever prerequisite is missing rather than surfacing a 401.
 
 ## Hosted mode
 
