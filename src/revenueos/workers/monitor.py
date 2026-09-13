@@ -78,4 +78,4 @@ class MonitorWorker:
         else:
             gate = "ungated (no LLM credential — recency only)"
         return WorkerResult(ok=True, summary=f"{created} conversation(s) worth joining; {result.get('found', 0)} relevant thread(s) found.",
-                            actions_created=created, details={"found": result.get("found", 0), "gated": result.get("gated")})
+                            actions_created=created, details={"found": result.get("found", 0), "gated": result.get("gated"), "gate": gate})

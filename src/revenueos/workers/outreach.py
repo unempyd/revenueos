@@ -96,7 +96,6 @@ def build_recipe(ctx: BusinessContext) -> Recipe:
     """One hook, written for the owner of a small business. The opener is filled per lead from what was
     observed on their site; nothing in the body comes from an unfilled canon section."""
     company = ctx.company_name
-    site = ctx.website or ""
     booking = ctx.config.get("booking_url") or ""
     ask = f"Worth 15 minutes this week? {booking}".strip() if booking else "If that is worth 15 minutes this week, reply and the full list comes back the same day."
     signer = (ctx.config.get("sender") or {}).get("signature")

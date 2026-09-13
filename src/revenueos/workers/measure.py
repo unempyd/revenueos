@@ -145,7 +145,7 @@ class MeasureWorker:
     upstream = "pulse-cmo crawl (re-crawl), claude-ads aggregate, ai-sales-agent send rows"
 
     def run(self, ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, run_id: int) -> WorkerResult:
-        measured = pending = 0
+        measured = pending = unchanged = 0
         for action in store.executed_actions():
             last = action.get("outcome")
             if last and last["status"] in ("measured", "unmeasurable"):
@@ -172,5 +172,7 @@ class MeasureWorker:
                 measured += 1
             elif status == "pending":
                 pending += 1
-        return WorkerResult(ok=True, summary=f"{measured} result(s) measured, {pending} still pending.", actions_created=0,
+            elif status == "no_effect":
+                unchanged += 1
+        return WorkerResult(ok=True, summary=f"{measured} result(s) measured, {unchanged} re-checked with no change yet, {pending} still pending.", actions_created=0,
                             details={"measured": measured, "pending": pending})
