@@ -59,7 +59,10 @@
   matchMedia("(min-width: 901px)").addEventListener("change", function (e) { if (e.matches) setOpen(false); });
 
   /* reveals — observe once, then stop paying for them */
-  var targets = document.querySelectorAll("section, .loop, .price-grid, .evidence-shots, .brief-box");
+  /* Anything already marked .rv in the markup must be observed too, or it
+     keeps opacity:0 forever — a reveal class with no observer is an
+     invisible element, which is worse than no animation at all. */
+  var targets = document.querySelectorAll("section, .loop, .price-grid, .evidence-shots, .brief-box, .rv");
   targets.forEach(function (el) { el.classList.add("rv"); });
   if (reduce || !("IntersectionObserver" in window)) {
     targets.forEach(function (el) { el.classList.add("in"); });

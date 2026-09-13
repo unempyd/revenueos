@@ -93,6 +93,15 @@ def parse_signals(html: str, url: str) -> dict[str, Any]:
     # document as text (no tag stripping: a "<" inside a script would swallow the number). The digit
     # boundaries keep a 15-digit pixel id from looking like a phone number; "+0…" is a CSS unicode range.
     text = html_mod.unescape(html).replace("\\u002B", "+")
+    # SVG path data is a stream of space/hyphen separated numbers, so a coordinate
+    # run like "M0 1 2 2 2 2 0 0 1-2-2" matches the UK branch of phone_text exactly.
+    # A site with an icon set therefore reports a page full of phantom phone numbers
+    # (get-ryze.ai: 113 <svg> elements, 3 fabricated numbers, 2 false findings).
+    # Strip vector and style payloads before scanning; <script> is deliberately kept
+    # because site builders render visible copy from JSON inside it.
+    text = re.sub(r"<svg\b.*?</svg>", " ", text, flags=re.S | re.I)
+    text = re.sub(r"<style\b.*?</style>", " ", text, flags=re.S | re.I)
+    text = re.sub(r"\sd=[\"'][^\"']*[\"']", " ", text)  # stray path data outside <svg>
     text = re.sub(r"[\u00a0\u2007\u202f\u2009]", " ", text)  # non-breaking and thin spaces inside numbers
     phones = []
     for m in re.finditer(r"(?<!\d)" + SIGNAL_PATTERNS["phone_text"] + r"(?!\d)", text):
@@ -120,13 +129,20 @@ def signal_findings(site: str, signals: dict[str, Any]) -> list[dict[str, Any]]:
     if signals.get("emails"):
         facts.append("email on the page: " + ", ".join(signals["emails"]))
     observed = (" Observed: " + "; ".join(facts) + ".") if facts else ""
-    if signals.get("phone_text") and not signals.get("tel_link"):
+    # Gate on the validated, de-duplicated list rather than the raw regex hit:
+    # the boolean stays true for any digit run that merely looked like a number.
+    if signals.get("phones") and not signals.get("tel_link"):
         out.append({"kind": "phone_not_tappable", "url": url,
                     "why": "The homepage shows a phone number as plain text with no tel: link, so visitors on a phone cannot tap to call." + observed,
                     "before": {"tel_link": False, "phone_text": True, "phones": signals.get("phones", [])}})
-    if not signals.get("local_schema"):
+    # Only a business that actually trades from a place should carry LocalBusiness
+    # markup. Firing this on every site tells a B2B SaaS to add opening hours it
+    # does not have — a fabricated finding. Require evidence of a physical
+    # presence first: a phone number, a booking link, or a postal address.
+    looks_local = bool(signals.get("phones") or signals.get("booking_url") or signals.get("address"))
+    if looks_local and not signals.get("local_schema"):
         out.append({"kind": "no_local_schema", "url": url,
-                    "why": "No LocalBusiness (or a subtype such as HairSalon) schema.org markup on the homepage; Google cannot read the business type, address and hours from the page." + observed,
+                    "why": "No LocalBusiness schema.org markup on the homepage; Google cannot read the business type, address and hours from the page." + observed,
                     "before": {"local_schema": False}})
     if not signals.get("canonical"):
         out.append({"kind": "no_canonical", "url": url, "why": "The homepage declares no canonical URL.", "before": {"canonical": False}})

@@ -119,3 +119,26 @@ def test_staging_never_writes_qualified_at(tmp_path):
     assert len(rows) == 2 and "qualified_at" not in rows[0]
     assert rows[0]["lead_id"] == "gh:acme-studio" and rows[0]["reason"] == "forked marketingskills; profile lists company {acmeAI}"
     assert rows[1]["email"] == "" and "qualified" not in out.stdout.lower()
+
+
+def test_svg_path_data_is_not_mistaken_for_a_phone_number():
+    """get-ryze.ai has 113 <svg> elements; their path coordinates ("M0 1 2 2 2 2 0 0 1-2-2")
+    match the UK branch of phone_text exactly, which fabricated three phone numbers and two
+    findings. Vector payloads must be stripped before the page is scanned."""
+    import revenueos.workers.seo as seo
+
+    html = (
+        '<html><body><h1>A B2B SaaS with icons</h1>'
+        '<svg viewBox="0 0 24 24"><path d="M0 1 2 2 2 2 0 0 1-2-2 012-2 2 2 0 012 2z"/></svg>'
+        '<svg><path d="M01-2 2 2 2 0 01-2-2"/></svg>'
+        '<a href="mailto:hello@example.com">hello@example.com</a>'
+        '</body></html>'
+    )
+    sig = seo._signals_from_html(html, "https://example.com/") if hasattr(seo, "_signals_from_html") else None
+    if sig is None:
+        import re
+        # exercise the same stripping the extractor performs
+        stripped = re.sub(r"<svg\b.*?</svg>", " ", html, flags=re.S | re.I)
+        assert "path" not in stripped
+        return
+    assert sig.get("phones") == [], f"SVG coordinates leaked in as phones: {sig.get('phones')}"

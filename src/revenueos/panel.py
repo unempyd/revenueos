@@ -133,6 +133,8 @@ h2{margin:var(--sp-10) 0 var(--sp-3);font-size:21px;font-weight:600;line-height:
 
 /* ── controls: feedback on press, not release ── */
 form{display:inline-flex;margin:0 var(--sp-2) var(--sp-2) 0}
+.chip{margin-right:10px}
+.stepper{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 var(--sp-5)} .step{padding:6px 14px;border-radius:var(--r-pill);border:1px solid var(--line);color:var(--ink-3);font-size:13px} .step.done{color:var(--ok);border-color:var(--ok)} .step.on{color:var(--accent);border-color:var(--accent)} .step.ok{color:var(--ok);border-color:var(--ok)} .step.bad{color:#b00020;border-color:#b00020} #feed{max-height:420px;overflow:auto} a.cta{display:inline-block;padding:10px 18px;border-radius:var(--r-btn);background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600}
 form.stack{display:block;flex:none;width:100%;margin:0 0 var(--sp-6)} form.stack input,form.stack textarea{width:100%;box-sizing:border-box} form.once{padding:var(--sp-5);border:1px solid var(--line-soft);border-radius:var(--r-card);background:var(--surface)}
 button{
   font:inherit; font-size:14px; font-weight:500; letter-spacing:-.016em;
@@ -224,6 +226,35 @@ ROW = """<div class="row"><div class="t"><span class="type">{atype}</span><b>{ti
 ROW_APPROVED = """<div class="row"><div class="t"><span class="type">{atype} · approved, waiting to run</span><b>{title}</b><small>{content}</small>{link}</div>
 <form method="post" action="/action/{id}/execute"><button class="x">Execute now</button></form>
 <form method="post" action="/action/{id}/ignore"><button>Ignore</button></form></div>"""
+
+LIVE = """<div class="stepper" id="stepper">{steps}</div>
+<div class="brief" id="feed">Starting…</div>
+<p id="done" hidden><a class="cta" href="/">Open TODAY →</a></p>
+<script>
+(function(){{
+  var es = new EventSource("/events/run?workers={workers}");
+  var feed = document.getElementById("feed"); feed.textContent = "";
+  var rows = {{}};
+  function line(t){{ var d = document.createElement("div"); d.textContent = t; feed.appendChild(d); feed.scrollTop = feed.scrollHeight; return d; }}
+  function mark(step, cls){{ var el = document.querySelector('[data-step="'+step+'"]'); if (el) {{ el.className = "step " + cls; }} }}
+  es.onmessage = function(ev){{
+    var e = JSON.parse(ev.data);
+    if (e.state === "running") {{ rows[e.worker] = line("▸ " + e.label + " — running"); mark(e.step, "on"); }}
+    else if (e.state === "done") {{ var r = rows[e.worker] || line(""); r.textContent = (e.ok ? "✓ " : "✗ ") + e.label + " — " + e.summary + (e.actions ? "  (+" + e.actions + " new)" : ""); mark(e.step, e.ok ? "ok" : "bad"); }}
+    else if (e.state === "finished") {{ line(""); line("Done: " + e.new + " new opportunit" + (e.new === 1 ? "y" : "ies") + " waiting for your decision."); document.getElementById("done").hidden = false; es.close(); }}
+  }};
+  es.onerror = function(){{ es.close(); }};
+}})();
+</script>"""
+
+STEPS = (("connect", "Connect"), ("discover", "Discover"), ("analyse", "Analyse"), ("approve", "Approve"), ("execute", "Execute"), ("measure", "Measure"))
+WORKER_STEP = {"discover": "discover", "outreach": "discover", "inbox": "discover", "seo": "analyse", "ads-audit": "analyse", "ads-live": "analyse",
+               "analytics": "analyse", "content": "analyse", "monitor": "analyse", "billing": "analyse", "growth": "analyse", "measure": "measure"}
+WORKER_LABEL = {"discover": "Finding prospects", "outreach": "Drafting emails", "inbox": "Reading the mailbox", "seo": "Reading your website",
+                "ads-audit": "Auditing ad exports", "ads-live": "Reading your ad accounts", "analytics": "Reading Search Console / GA4",
+                "content": "Planning content", "monitor": "Scanning conversations", "billing": "Reading Stripe", "growth": "Recording external numbers",
+                "measure": "Re-checking earlier actions"}
+ALL_WORKERS = ["discover", "outreach", "inbox", "seo", "ads-audit", "ads-live", "analytics", "billing", "content", "monitor", "measure"]
 
 LOGIN = """<form method="post" action="/login"><label>Panel password</label><input type="password" name="password" autofocus>
 <p><button class="x">Sign in</button></p></form>"""
@@ -331,7 +362,16 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                     lic = f'<span class="none">{html.escape(v["reason"] if v["tier"] == "community" else "licence: " + v["tier"])}</span>'
                 except Exception:
                     lic = ""
-            return PAGE.format(title=html.escape(title), sub=html.escape(sub), body=body, style=STYLE, nav_extra=lic,
+            try:
+                runs = self.store.list_runs(limit=1)
+                last = runs[0] if runs else None
+                n_conn = len(ConnectionStore(self.ws).all())
+                chip = (f'<span class="none chip">{n_conn} connection{"s" if n_conn != 1 else ""} · '
+                        f'last run {html.escape((last or {}).get("finished_at") or (last or {}).get("started_at") or "never")[:16].replace("T", " ")}'
+                        f'{" · " + html.escape(str((last or {}).get("status"))) if last else ""}</span>')
+            except Exception:
+                chip = ""
+            return PAGE.format(title=html.escape(title), sub=html.escape(sub), body=body, style=STYLE, nav_extra=chip + lic,
                                msg=f'<div class="msg">{html.escape(msg)}</div>' if msg else "")
 
         def _authed(self) -> bool:
@@ -387,6 +427,12 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                 self._send(self._page("RESULTS", f"{self.ctx.company_name} — what RevenueOS did and what happened", self._results_html(), msg))
             elif path == "/onboard":
                 self._send(self._page("Connect your business", "One questionnaire. Blank answers keep the current text.", self._onboard_form(), msg))
+            elif path == "/run-live":
+                workers = parse_qs(url.query).get("workers", ["all"])[0]
+                steps = "".join(f'<span class="step {"done" if k == "connect" and self.ctx.is_onboarded() else ""}" data-step="{k}">{v}</span>' for k, v in STEPS)
+                self._send(self._page("Watch it work", f"{self.ctx.company_name}: every check, as it runs", LIVE.format(steps=steps, workers=html.escape(workers)), msg))
+            elif path == "/events/run":
+                self._stream_run(parse_qs(url.query).get("workers", ["all"])[0])
             elif path == "/connections":
                 self._send(self._page("Connections", "Accounts you authorise once. Read-only until you allow changes.", self._connections_html(), msg))
             elif path == "/spend":
@@ -423,8 +469,9 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
                 )
                 for a in b.actions[:100]
             )
-            run_form = ('<form method="post" action="/run/all"><button>Run all workers now</button></form> '
-                        '<form method="post" action="/run/measure"><button>Measure results</button></form>')
+            run_form = ('<form method="get" action="/run-live"><input type="hidden" name="workers" value="all"><button class="x">Run everything now and watch</button></form> '
+                        '<form method="post" action="/run/measure"><button>Measure results</button></form> '
+                        + (f'<form method="post" action="/approve-all"><button>Approve all {len(b.actions)}</button></form>' if b.actions else ""))
             approved_rows = "".join(
                 ROW_APPROVED.format(
                     id=a["id"], atype=html.escape(a["action_type"].replace("_", " ")), title=html.escape(a["title"]),
@@ -464,6 +511,36 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             table = ("<table><tr><th>#</th><th>What it found</th><th>What it did</th><th>When</th><th>Result</th><th>Measured</th></tr>"
                      + "".join(rows) + "</table>") if rows else "<p>No executed actions yet.</p>"
             return head + "<h2>Every executed action</h2>" + table
+
+        def _stream_run(self, which: str) -> None:
+            """Server-Sent Events: one line per worker start and finish, then a finished event. Runs the workers in
+            this request thread (ThreadingHTTPServer gives each request its own) and flushes after every event."""
+            names = ALL_WORKERS if which == "all" else [w for w in which.split(",") if w in WORKER_LABEL]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            def emit(obj: dict) -> None:
+                try:
+                    self.wfile.write(f"data: {json.dumps(obj, default=str)}\n\n".encode())
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    raise
+            ws, store, ctx = self.ws, self.store, self.ctx
+            llm = maybe_llm()
+            new = 0
+            try:
+                for n in names:
+                    emit({"state": "running", "worker": n, "label": WORKER_LABEL.get(n, n), "step": WORKER_STEP.get(n, "analyse")})
+                    r = run_worker(n, ws, store, ctx, llm, "panel-live")
+                    new += r.actions_created
+                    emit({"state": "done", "worker": n, "label": WORKER_LABEL.get(n, n), "step": WORKER_STEP.get(n, "analyse"), "ok": r.ok,
+                          "summary": (r.summary or r.error or "")[:300], "actions": r.actions_created})
+                emit({"state": "finished", "new": new})
+            except (BrokenPipeError, ConnectionResetError):
+                return
 
         def _connections_html(self) -> str:
             cs = ConnectionStore(self.ws)
@@ -654,6 +731,15 @@ def make_handler(ws0: Workspace, store0: Store, ctx0: BusinessContext, *, passwo
             parts = path.strip("/").split("/")
             if parts[0] == "connections" and len(parts) in (2, 3):
                 self._connections_post(parts[1], parts[2] if len(parts) == 3 else "connect", parse_qs(body.decode("utf-8", "replace")))
+                return
+            if path == "/approve-all":
+                n = 0
+                for a in self.store.list_actions("pending"):
+                    self.store.set_action_status(a["id"], "approved")
+                    if a["context"].get("draft_id"):
+                        self.store.set_draft_approval(a["context"]["draft_id"], "approved", by="panel")
+                    n += 1
+                self._redirect("/?msg=" + quote(f"Approved {n} action(s). Nothing runs until you press Execute on each, or Run everything and watch."))
                 return
             if len(parts) == 2 and parts[0] == "run":
                 names = ["discover", "outreach", "inbox", "seo", "ads-audit", "content", "monitor", "measure"] if parts[1] == "all" else [parts[1]]

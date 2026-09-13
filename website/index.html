@@ -129,6 +129,7 @@
   .foot-links a{color:var(--ink-soft)}
 .demo-cmd{display:inline-block;margin:18px auto 0;padding:12px 18px;border-radius:12px;background:#111;color:#fff;font:14px ui-monospace,Menlo,monospace;text-align:left;max-width:100%;overflow-x:auto}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.days{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:20px} .day{padding:18px 20px;border:1px solid var(--smoke,#2c2c2e);border-radius:16px;background:rgba(255,255,255,.03)} .day b{display:block;margin-bottom:8px} .day p{margin:0;font-size:14px;line-height:1.5;color:var(--platinum,#cfcfd2)} .verified{margin-top:14px;font-size:13px;color:var(--silver,#8a8a8e)}
 </style>
 <link rel="stylesheet" href="design.css">
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "LocalBusiness", "name": "RevenueOS", "url": "https://unempyd.github.io/revenueos/", "description": "We give small businesses a self-hosted revenue department that finds opportunities, executes approved revenue work, and measures what happened."}</script>
@@ -146,6 +147,7 @@
       <a href="#install">Install</a>
       <a href="#inside">Built in the open</a>
       <a href="proof.html">Proof</a>
+      <a href="compare.html">Compare</a>
     </nav>
     <button class="navbtn" aria-expanded="false" aria-label="Open menu"><span></span><span></span><span></span></button>
     <a class="cta-btn small nav-cta" href="#install">Install free</a>
@@ -162,6 +164,7 @@
       fixes what you approve, and proves the change before you pay anything.
     </p>
     <pre class="demo-cmd">pip install revenueos &amp;&amp; revenueos demo https://yoursite.com</pre>
+    <p class="verified">Last verified run: 2026-09-13 · two site fixes deployed by the executor and measured 0 → 1 · 139 tests passing · <a href="proof.html">the record</a></p>
     <div class="hero-ctas">
       <a class="cta-btn" href="https://github.com/unempyd/revenueos">Get it on GitHub</a>
       <a class="cta-btn ghost" href="pricing.html">See pricing</a>
@@ -281,7 +284,19 @@ $0 pipeline generated</pre>
       </div>
       <button class="replay" type="button">Replay</button>
     </div>
-<p class="loop-legend">Community runs this loop by hand, one command at a time. Pro and above turn it on and leave it running.</p>
+<p class="loop-legend">Fixes, not suggestions — and never without your yes. Everything runs free; you pay after the first measured result you agreed with.</p>
+  </section>
+
+  <section id="timeline">
+    <div class="eyebrow">What happens after you connect</div>
+    <h2>Day by day, not a feature list.</h2>
+    <div class="days">
+      <div class="day"><b>Day 0 — Connect</b><p>Give it your website. It reads the site, fills in your business profile and labels every guess. Add Stripe, your site's repo or WordPress, Google or Meta when you want more done.</p></div>
+      <div class="day"><b>Day 0 — Audit</b><p>Every page crawled, the homepage read for tappable phones, LocalBusiness schema, canonical, titles, descriptions, sitemap; ad exports or connected accounts run through the 414-control catalogue. Findings land on TODAY with Approve / Execute / Ignore.</p></div>
+      <div class="day"><b>Days 1–7 — First fixes ship</b><p>Each approved fix is deployed by RevenueOS itself where it can (git-hosted sites, WordPress) or handed to you as an exact change. Then it re-checks the live page and writes before → after next to the action.</p></div>
+      <div class="day"><b>Every week — Re-check and next action</b><p>Workers run on a schedule, prospects with live ad spend are found from public data, drafts wait for your read, wasting campaigns are queued to pause. <code>revenueos next</code> ranks what to do from what actually worked.</p></div>
+      <div class="day"><b>When you agree — Pay</b><p>Nothing is charged until RESULTS shows a measured change you approved. Then 14 more days free, then $99/month to keep it running continuously. One-shot runs and the panel never lock.</p></div>
+    </div>
   </section>
 
   <section id="pricing">

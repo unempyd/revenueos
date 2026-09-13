@@ -3,4 +3,5 @@
   <url><loc>https://unempyd.github.io/revenueos/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
   <url><loc>https://unempyd.github.io/revenueos/pricing.html</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://unempyd.github.io/revenueos/proof.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://unempyd.github.io/revenueos/compare.html</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 </urlset>

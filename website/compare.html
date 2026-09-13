@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RevenueOS compared — Ryze, claude-ads, agencies</title>
+<meta name="description" content="RevenueOS next to Ryze AI, claude-ads and an agency: what executes, what waits for approval, what is measured, and when you pay. Every row is checkable.">
+<link rel="canonical" href="https://unempyd.github.io/revenueos/compare.html">
+<link rel="stylesheet" href="design.css">
+<style>
+.cmp{width:100%;border-collapse:collapse;margin:24px 0;font-size:15px}
+.cmp th,.cmp td{padding:12px 14px;border-bottom:1px solid var(--smoke,#333);text-align:left;vertical-align:top}
+.cmp th{font-weight:600}
+.cmp td.y{color:var(--ok,#30d158)} .cmp td.n{color:var(--silver,#8a8a8e)}
+.note{color:var(--silver,#8a8a8e);font-size:13px}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="wrap row">
+    <div class="brand"><span class="dot"></span>RevenueOS</div>
+    <nav class="links"><a href="index.html#loop">How it works</a><a href="pricing.html">Pricing</a><a href="proof.html">Proof</a><a href="compare.html">Compare</a></nav>
+    <a class="cta-btn small nav-cta" href="index.html#install">Install free</a>
+  </div>
+</header>
+<main class="wrap">
+  <section class="hero">
+    <div class="eyebrow">Compared, row by row</div>
+    <h1>What executes, what waits for your yes, what is measured, and when you pay.</h1>
+    <p class="lede center">Every cell below is checkable against the public pages of each product on 2026-09-13. Where we do not know, the cell says so.</p>
+  </section>
+  <section class="tight">
+    <div style="overflow-x:auto">
+    <table class="cmp">
+      <thead><tr><th></th><th>RevenueOS</th><th>Ryze AI</th><th>claude-ads (open source)</th><th>A typical agency</th></tr></thead>
+      <tbody>
+        <tr><th>What it is</th><td>Open-source revenue department: website, ads, leads, outreach, calendar, invoices</td><td>Hosted AI for ads, SEO and website</td><td>An ads audit skill set you run inside Claude</td><td>People</td></tr>
+        <tr><th>Connect</th><td class="y">Once: give it your URL; it fills the rest and labels every guess</td><td>Connect ad accounts, Search Console</td><td>Paste exports into Claude</td><td>Onboarding calls</td></tr>
+        <tr><th>Executes changes</th><td class="y">Yes: site fixes, campaign pause/budget, calendar bookings, invoices, email</td><td class="y">Yes: bids, budgets, SEO fixes</td><td class="n">No: reports and recommendations</td><td class="y">Yes</td></tr>
+        <tr><th>Waits for your approval on every change</th><td class="y">Yes, every action, always; plus a per-account "allow changes" switch that is off by default</td><td>Write actions are approval-gated (their words)</td><td class="n">Not applicable</td><td>Varies</td></tr>
+        <tr><th>Re-checks the world after acting and records before → after</th><td class="y">Yes, on every action; no metric is ever synthesised</td><td>Weekly reports; we could not verify per-action before/after</td><td class="n">No</td><td>Monthly report</td></tr>
+        <tr><th>Ads control catalogue</th><td class="y">414 controls across 12 platforms (the claude-ads catalogue, vendored), evidence-only verdicts</td><td>Undisclosed; their skills are open source</td><td class="y">414 controls</td><td>Depends on the person</td></tr>
+        <tr><th>Finds new customers</th><td class="y">Public-data lead discovery with evidence, gated: found · contactable · qualified</td><td class="n">No</td><td class="n">No</td><td>Sometimes</td></tr>
+        <tr><th>Runs on your own machine</th><td class="y">Yes (MIT). Hosted mode too</td><td class="n">Hosted only</td><td class="y">Yes</td><td class="n">No</td></tr>
+        <tr><th>When you pay</th><td class="y">After the first measured result you agreed with, then $99/month for continuous operation</td><td>From day one: $89–$1,499/month, 7-day trial</td><td>Free (you pay for Claude)</td><td>Retainer from day one, often % of spend</td></tr>
+        <tr><th>Try it on any site in one command</th><td class="y"><code>revenueos demo https://yoursite</code></td><td class="n">Free audit after connecting an account</td><td class="n">No</td><td class="n">No</td></tr>
+        <tr><th>Live Google / Meta connection today</th><td>Adapters and executors built and tested; live use needs your OAuth client / app</td><td class="y">Yes</td><td class="n">Exports only</td><td class="y">Yes</td></tr>
+        <tr><th>Customers with measured results</th><td class="n">None yet. Revenue $0. We publish this until it changes</td><td>Claims 2,000+ clients; no verifiable case studies found</td><td>Not a product</td><td>Ask for references</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="note">Ryze figures from get-ryze.ai (homepage, /pricing, /compare, /security-policy) on 2026-09-13. claude-ads is the open-source repository RevenueOS vendors for its ads catalogue, with attribution in NOTICE.md. Corrections: open an issue.</p>
+  </section>
+</main>
+<footer><div class="wrap foot-row"><div>© 2026 RevenueOS. Open-source core (MIT). Nothing sends, publishes or spends without your approval.</div>
+<div class="foot-links"><a href="index.html">Home</a><a href="pricing.html">Pricing</a><a href="proof.html">Proof</a><a href="https://github.com/unempyd/revenueos">GitHub</a></div></div></footer>
+</body>
+</html>

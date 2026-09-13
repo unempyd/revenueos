@@ -137,8 +137,11 @@ def test_homepage_signal_findings_are_measured_on_the_live_page(workspace, store
     """The first real customer site: phone as text (no tel: link), no LocalBusiness schema, no canonical; Meta pixel + GA4 present."""
     monkeypatch.setattr(seo, "crawl_website", _fake_crawl([]))
     monkeypatch.setattr(seo, "authority_gap", lambda u, c: None)
+    # A real local-business page yields the extracted numbers, not just the boolean:
+    # both findings now gate on that evidence so they cannot fire on a B2B SaaS site.
     before = {"ok": True, "url": "https://acme-scheduling.example/", "tel_link": False, "mailto_link": False, "booking_link": True,
-              "phone_text": True, "meta_pixel": True, "google_ads_tag": False, "ga4": True, "gtm": False, "local_schema": False, "canonical": False}
+              "phone_text": True, "phones": ["+1 415 555 0134"], "booking_url": "/book",
+              "meta_pixel": True, "google_ads_tag": False, "ga4": True, "gtm": False, "local_schema": False, "canonical": False}
     monkeypatch.setattr(seo, "homepage_signals", lambda site, timeout=15.0: before)
     r = run_worker("seo", workspace, store, onboarded, None)
     kinds = {a["context"]["kind"] for a in store.list_actions("pending", "seo_opportunity")}

@@ -98,3 +98,29 @@ def test_static_site_and_path_traversal(server, workspace):
     assert status == 200 and "RevenueOS" in body
     status, _h, _b = _req(srv, "GET", "/site/../pyproject.toml")
     assert status == 404
+
+
+def test_watch_it_work_streams_each_worker(server, workspace, store):
+    srv, ctx = server
+    cookie = "rs=" + make_token()
+    status, _h, page = _req(srv, "GET", "/run-live?workers=discover,measure", cookie=cookie)
+    assert status == 200 and 'data-step="discover"' in page and "EventSource" in page
+    (workspace.exports / "leads.csv").write_text(LEADS_CSV)
+    status, headers, body = _req(srv, "GET", "/events/run?workers=discover,measure", cookie=cookie)
+    assert status == 200 and {k.lower(): v for k, v in headers.items()}.get("content-type", "").startswith("text/event-stream")
+    events = [json.loads(ln[6:]) for ln in body.splitlines() if ln.startswith("data: ")]
+    assert [e["state"] for e in events] == ["running", "done", "running", "done", "finished"]
+    assert events[1]["worker"] == "discover" and events[1]["actions"] == 2 and events[-1]["new"] == 2
+    assert events[0]["label"] == "Finding prospects" and events[2]["step"] == "measure"
+
+
+def test_status_chip_and_approve_all(server, workspace, store):
+    srv, ctx = server
+    cookie = "rs=" + make_token()
+    (workspace.exports / "leads.csv").write_text(LEADS_CSV)
+    _req(srv, "POST", "/run/discover", "", cookie=cookie)
+    _s, _h, page = _req(srv, "GET", "/", cookie=cookie)
+    assert "0 connections" in page and "last run" in page and "Approve all 2" in page
+    status, h, _ = _req(srv, "POST", "/approve-all", "", cookie=cookie)
+    assert status == 303 and "Approved%202" in h["Location"]
+    assert store.list_actions("pending") == [] and len(store.list_actions("approved")) == 2
