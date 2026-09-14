@@ -27,6 +27,9 @@ logs/
 services/openoutreach/data/
 revenueos.yaml
 
+# Playwright MCP session artefacts (console logs, page snapshots)
+.playwright-mcp/
+
 # added by scripts/build_public.py to keep the export's git history clean
 upstream/*/
 data/*.db

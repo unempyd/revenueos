@@ -1,5 +1,6 @@
 # RevenueOS runtime topology (all optional — `revenueos` runs fine as a bare CLI).
 #
+#   docker compose pull                             # published image, no build toolchain needed
 #   docker compose up orchestrator panel            # always-on scheduler + control panel
 #   docker compose --profile proxy up -d            # + Caddy TLS reverse proxy in front of panel (see deploy/README.md)
 #   docker compose --profile outreach up            # + OpenOutreach (GPL-3.0) as an isolated service
@@ -12,6 +13,9 @@
 # deploy/README.md.
 services:
   orchestrator:
+    # The published multi-arch image, so `docker compose pull && docker compose up` needs no
+    # build toolchain. `docker compose build` / `up --build` still builds from source instead.
+    image: ghcr.io/unempyd/revenueos:${REVENUEOS_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -42,6 +46,7 @@ services:
       retries: 3
 
   panel:
+    image: ghcr.io/unempyd/revenueos:${REVENUEOS_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile

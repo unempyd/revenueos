@@ -410,6 +410,10 @@ def cmd_orchestrator(args: argparse.Namespace) -> int:
             print(verdict["reason"], file=sys.stderr)
             return 3
         print(f"continuous operation: {verdict['reason']}", flush=True)
+    from .paths import seed_data_defaults
+
+    for name in seed_data_defaults(ws.root):
+        print(f"restored data/{name} from the bundled default (it was missing)", flush=True)
     orch = ws.root / "orchestrator"
     if not (orch / "node_modules").exists():
         subprocess.run(["npm", "install", "--silent"], cwd=orch, check=True)

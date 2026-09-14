@@ -5,9 +5,11 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from shutil import copy2 as shutil_copy
 
 BUNDLE = Path(__file__).resolve().parent / "bundle"
 HOME_WORKSPACE = Path(os.environ.get("REVENUEOS_HOME", "~/.revenueos")).expanduser()
+DATA_DEFAULTS = ("automations.json",)
 WORKSPACE_DIRS = ("company-context", "learning-loop", "methodology", "playbooks", "skills", "agents", "tools",
                   "capabilities", "website", "orchestrator")
 
@@ -32,6 +34,48 @@ def materialise(dest: Path, source: Path = BUNDLE) -> Path:
     if (source / "data" / "automations.json").is_file() and not (dest / "data" / "automations.json").exists():
         shutil.copy2(source / "data" / "automations.json", dest / "data" / "automations.json")
     return dest
+
+
+def seed_data_defaults(root: Path) -> list[str]:
+    """Restore the data/ files the wheel ships, for a workspace whose data/ is empty.
+
+    A container that bind-mounts an empty host directory over data/ masks the copy baked into
+    the image, so `revenueos orchestrator` came up with no schedule at all and said nothing
+    about why. The bundle inside site-packages is not masked by that mount, so it is the one
+    source that always survives. Only ever fills in what is missing; never overwrites.
+    """
+    restored: list[str] = []
+    (root / "data").mkdir(parents=True, exist_ok=True)
+    for name in DATA_DEFAULTS:
+        dest = root / "data" / name
+        if dest.exists():
+            continue
+        src = next((d / name for d in _default_dirs() if (d / name).is_file()), None)
+        if src is not None:
+            shutil_copy(src, dest)
+            restored.append(name)
+    return restored
+
+
+def _default_dirs() -> list[Path]:
+    """Where a shipped data/ default can be found, best first.
+
+    Three cases, and the container is the awkward one. A normal wheel install has the bundle next
+    to the package (BUNDLE). An editable install redirects imports to the source tree, so BUNDLE
+    points at a directory that was never created, while the wheel's bundle still sits in
+    site-packages: that is the image's layout, and it is the copy a data/ bind-mount cannot mask.
+    A plain source checkout has neither and just uses its own data/.
+    """
+    import sysconfig
+
+    dirs = [BUNDLE / "data"]
+    for key in ("purelib", "platlib"):
+        lib = sysconfig.get_paths().get(key)
+        if lib:
+            dirs.append(Path(lib) / "revenueos" / "bundle" / "data")
+    dirs.append(Path(__file__).resolve().parent.parent.parent / "data")
+    seen: set[Path] = set()
+    return [d for d in dirs if d.is_dir() and not (d in seen or seen.add(d))]
 
 
 def is_workspace(path: Path) -> bool:

@@ -226,6 +226,13 @@ revenueos run measure && revenueos results
 revenueos serve                              # the same surface as a web panel
 ```
 
+Or run the published image, no Python toolchain needed:
+
+```bash
+docker run --rm -v "$PWD/data:/app/data" ghcr.io/unempyd/revenueos:latest revenueos doctor
+docker compose pull && docker compose up orchestrator panel   # always-on, panel on 127.0.0.1:8791
+```
+
 From source:
 
 ```bash
