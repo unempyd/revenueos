@@ -25,6 +25,18 @@ leaves a stranger no way to confirm we exist. A link to revenueos.com.au from a 
 hello@revenueos.com.au is the cheapest honesty signal available, and the alignment is the thing a
 phishing message cannot reproduce.
 
+**The mark is 48px, which is the smallest size its own artwork survives.** Rendered side by side at
+32 through 64, the stems between its dots close up below 48 and it reads as a fuzzy disc. That is
+the drawing, not the resampling, so the asset is rendered straight from the vector at twice the
+display size and the display size is the one the drawing needs.
+
+**The lockup is centred, with one mark height of clear space under it.** Left aligned against the
+top corner it sat in the weakest position available, competing with the eyebrow directly beneath.
+Airtable, Mixpanel, Otter and HoneyBook all centre a small lockup over the card instead, so the
+brand reads once and then gets out of the way. Horizontal rather than stacked, which is the default
+in every brand system that bothers to say; stacked would spend real height on a name the reader
+already has from the From line.
+
 **It is complete with images switched off**, which is the default state for a first contact from an
 unknown sender. The wordmark is live text next to the mark, the evidence panel is a bordered block
 rather than a picture, and no part of the argument lives inside an image.
@@ -55,7 +67,7 @@ INK, SOFT, MUTED = "#0f172a", "#44506b", "#6b7280"
 ACCENT = "#3d3ff0"
 BORDER, HAIR, PAGE, PANEL, QUOTE = "#e3e5ea", "#eceef2", "#f4f4f2", "#ffffff", "#f7f8fa"
 
-MARK = "https://revenueos.com.au/press/revenueos-mark-accent-64.png"
+MARK = "https://revenueos.com.au/press/revenueos-mark-accent-96.png"
 SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace"
 
@@ -259,16 +271,16 @@ def findings_email(*, business: str, page: str, findings: list[Finding],
 <div style="display:none;font-size:1px;color:{PAGE};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">Quoted from {escape(page)}, read by hand this morning. Three things, and what each one costs you.</div>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;background:{PAGE};">
   <tr>
-    <td align="center" style="padding:30px 16px 44px;">
+    <td align="center" style="padding:36px 16px 44px;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="580" style="border-collapse:collapse;width:580px;max-width:100%;">
 
         <tr>
-          <td style="padding:0 0 16px 2px;">
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-              <td width="32" style="width:32px;padding-right:10px;">
-                <img src="{MARK}" width="32" height="32" alt="" style="display:block;width:32px;height:32px;border:0;">
+          <td align="center" style="padding:0 0 48px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="border-collapse:collapse;"><tr>
+              <td width="48" style="width:48px;padding-right:13px;vertical-align:middle;">
+                <img src="{MARK}" width="48" height="48" alt="" style="display:block;width:48px;height:48px;border:0;">
               </td>
-              <td style="font-family:{SANS};font-size:13.5px;font-weight:700;letter-spacing:-.18px;color:{INK};">{escape(sender.company)}</td>
+              <td style="vertical-align:middle;font-family:{SANS};font-size:17px;line-height:1;font-weight:600;letter-spacing:.05px;color:{INK};">{escape(sender.company)}</td>
             </tr></table>
           </td>
         </tr>
