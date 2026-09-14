@@ -178,7 +178,7 @@ EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 ALLOWED_EMAIL_SUBSTRINGS = ("noreply", "anthropic")
 ALLOWED_EMAIL_DOMAIN_SUFFIXES = (".invalid", ".example")
 ALLOWED_EMAIL_DOMAINS = {"example.com", "github.com"}  # github noreply@github.com etc.
-ALLOWED_EMAILS = {"revenueos@icloud.com"}  # the project's published contact (SECURITY.md); intentionally public
+ALLOWED_EMAILS = {"hello@revenueos.com.au"}  # the project's published contact (SECURITY.md); intentionally public
 
 PATH_RE = re.compile(r"(?:/Users/|/home/)[^\s\"'`)>\]]+")
 

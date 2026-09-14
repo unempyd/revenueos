@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please report suspected security issues to **revenueos@icloud.com**.
+Please report suspected security issues to **hello@revenueos.com.au**.
 Do not open a public issue for a suspected vulnerability.
 
 Include, if you can:
