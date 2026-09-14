@@ -99,8 +99,7 @@ def ingest(store: Store, rows: list[dict[str, Any]], run_id: int, default_source
             contact_email=(r.get("email") or None), reason=r.get("reason"),
         )
         sig = r.get("_signals") or {}
-        score = (3 + (2 if sig.get("google_ads_tag") else 0) + (1 if sig.get("meta_pixel") else 0)
-                 + (1 if sig.get("phone_text") and not sig.get("tel_link") else 0) + (1 if sig and not sig.get("local_schema") else 0)) if verdict.qualified else 0
+        score = lead_value(sig) if verdict.qualified else 0
         store.set_qualification(lead_id, verdict.qualified, verdict.reasons, score=score, signals=sig or None)
         if not verdict.qualified:
             continue
@@ -117,6 +116,30 @@ def ingest(store: Store, rows: list[dict[str, Any]], run_id: int, default_source
         if aid:
             created += 1
     return {"found": found, "contactable": contactable, "qualified": qualified, "created": created}
+
+
+def lead_value(sig: dict[str, Any]) -> int:
+    """How much revenue is visibly leaking here — spend first, then waste.
+
+    The target is a business already buying traffic whose traffic is visibly failing to convert.
+    Both halves are required, so the score is gated on spend rather than summed with it: a site
+    with no ad tag scores 0 no matter how many SEO defects it has, because there is no spend to
+    rescue and nothing to sell against. A big spender with a clean funnel also scores low, because
+    there is nothing wrong to fix.
+
+    Spend is inferred only from tags that cost money to install: an `AW-` conversion id exists
+    only on an account running Google Ads, and a Meta Pixel only on one running Meta. Waste is
+    inferred from the gap between paying for a click and being able to receive it — no booking
+    path, no way to call from a phone, no measurement to tell them it is not working.
+    """
+    spend = (3 if sig.get("google_ads_tag") else 0) + (2 if sig.get("meta_pixel") else 0) + (1 if sig.get("gtm") else 0)
+    if not spend:
+        return 0
+    waste = ((3 if not (sig.get("booking_link") or sig.get("booking_url")) else 0)
+             + (2 if not sig.get("ga4") else 0)
+             + (2 if sig.get("phone_text") and not sig.get("tel_link") else 0)
+             + (1 if not sig.get("local_schema") else 0))
+    return spend + waste
 
 
 class DiscoverWorker:

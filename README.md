@@ -20,7 +20,8 @@ Free forever to run by hand, including the web panel. Running continuously on a 
 <p align="center">
 <a href="https://buy.stripe.com/eVq7sK3SAfVzfTd3WhfrW02"><strong>Start Pro</strong></a> ·
 <a href="https://unempyd.github.io/revenueos/pricing.html">Pricing</a> ·
-<a href="mailto:revenueos@icloud.com">Talk to a human</a>
+<a href="https://github.com/unempyd/revenueos/discussions/new/choose">Talk to a human</a>
+<sub>(or email <a href="mailto:revenueos@icloud.com">revenueos@icloud.com</a>)</sub>
 </p>
 
 <p align="center">

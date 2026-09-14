@@ -142,3 +142,27 @@ def test_svg_path_data_is_not_mistaken_for_a_phone_number():
         assert "path" not in stripped
         return
     assert sig.get("phones") == [], f"SVG coordinates leaked in as phones: {sig.get('phones')}"
+
+
+def test_lead_value_requires_spend_before_it_counts_waste():
+    """The target is a business already buying traffic whose traffic is leaking. A site with
+    problems and no ad spend is not a prospect — there is nothing being wasted to win back."""
+    from revenueos.workers.discover import lead_value
+
+    # every defect in the book, but nobody is buying traffic: not a prospect at any price
+    assert lead_value({"phone_text": "08 1234 5678", "tel_link": False, "local_schema": False,
+                       "booking_link": None, "ga4": False}) == 0
+    assert lead_value({}) == 0
+
+    # buying on both platforms and the click has nowhere to land: the top of the list
+    both_broken = lead_value({"google_ads_tag": True, "meta_pixel": True, "gtm": True,
+                              "phone_text": "08 1234 5678", "tel_link": False})
+    # spending just as hard, but the funnel works and is measured: nothing to sell them
+    spend_clean = lead_value({"google_ads_tag": True, "meta_pixel": True, "gtm": True,
+                              "booking_link": "https://book.example", "ga4": True,
+                              "tel_link": True, "local_schema": True})
+    assert both_broken > spend_clean > 0
+
+    # a bigger spender outranks a smaller one when both leak the same way
+    assert (lead_value({"google_ads_tag": True, "meta_pixel": True})
+            > lead_value({"meta_pixel": True}))
