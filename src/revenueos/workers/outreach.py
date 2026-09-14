@@ -251,7 +251,28 @@ def _as_models(store: Store, draft_id: str) -> tuple[EmailDraft, Lead]:
     return draft, Lead.model_construct(**lead)
 
 
+# Dash constructions in outbound copy read as machine-written, and this is the third time one has
+# reached a real message after being asked for. It is a send-time refusal now rather than a habit
+# to remember. Hyphenated words are fine: "tap-to-call" is a word, " - " is a dash.
+_DASHES = {"\u2014": "em dash", "\u2013": "en dash", "\u2012": "figure dash", "\u2212": "minus sign"}
+
+
+def dash_in(text: str) -> str | None:
+    """The name of the first dash construction in `text`, or None."""
+    for ch, name in _DASHES.items():
+        if ch in text:
+            return name
+    if " - " in text:
+        return "spaced hyphen"
+    return None
+
+
 def send_smtp(cfg: dict[str, Any], to_email: str, subject: str, text: str) -> str:
+    found = dash_in(subject) or dash_in(text)
+    if found:
+        raise RuntimeError(
+            f"not sending: the copy contains a {found}, which reads as machine-written. "
+            "Rewrite the sentence rather than swapping the character.")
     smtp = cfg.get("smtp") or {}
     host, port = smtp.get("host") or os.environ.get("SMTP_HOST"), int(smtp.get("port") or os.environ.get("SMTP_PORT") or 587)
     user = smtp.get("user") or os.environ.get("SMTP_USER") or (cfg.get("sender") or {}).get("email")

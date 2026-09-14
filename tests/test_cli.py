@@ -74,3 +74,35 @@ def test_explicit_root_must_be_a_workspace(tmp_path, capsys):
     with pytest.raises(SystemExit) as e:
         main(["--root", str(bare), "today"])
     assert "not a RevenueOS workspace" in str(e.value) and "workspace new" in str(e.value)
+
+
+def test_init_names_its_workspace_and_will_not_replace_another_company(tmp_path, capsys, monkeypatch):
+    """`init` printed relative paths while writing somewhere the caller never chose, so it looked
+    like it had done nothing, and it replaced an existing company's canon in silence."""
+    import json
+
+    from revenueos.cli import main
+    from revenueos.paths import new_workspace
+
+    ws = new_workspace(tmp_path / "ws")
+    monkeypatch.setenv("REVENUEOS_LLM", "off")
+
+    first = tmp_path / "a.json"
+    first.write_text(json.dumps({"company_name": "Acme Bakery", "website": "https://acme.example"}))
+    assert main(["--root", str(ws), "init", "--answers", str(first)]) == 0
+    out = capsys.readouterr().out
+    assert str(ws) in out, "the absolute workspace path must be named"
+
+    other = tmp_path / "b.json"
+    other.write_text(json.dumps({"company_name": "Different Business", "website": "https://other.example"}))
+    assert main(["--root", str(ws), "init", "--answers", str(other)]) == 2, "must refuse, not overwrite"
+    err = capsys.readouterr().err
+    assert "already connected to Acme Bakery" in err
+    assert "--force" in err
+
+    # Re-running for the same company is not a replacement and must still work.
+    assert main(["--root", str(ws), "init", "--answers", str(first)]) == 0
+    capsys.readouterr()
+
+    # And --force is the deliberate escape hatch.
+    assert main(["--root", str(ws), "init", "--force", "--answers", str(other)]) == 0

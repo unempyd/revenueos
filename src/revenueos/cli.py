@@ -64,6 +64,14 @@ def cmd_init(args: argparse.Namespace) -> int:
     if not answers:
         print("no answers given", file=sys.stderr)
         return 2
+    existing = ctx.company_name if ctx.is_onboarded() else None
+    incoming = (answers.get("company_name") or "").strip()
+    if existing and incoming and existing.casefold() != incoming.casefold() and not getattr(args, "force", False):
+        print(f"{ws.root} is already connected to {existing}.", file=sys.stderr)
+        print(f"Onboarding {incoming} here would replace its config and canon.", file=sys.stderr)
+        print("Use a separate workspace (`revenueos workspace new <dir>` then --root <dir>), "
+              "or pass --force to replace it.", file=sys.stderr)
+        return 2
     ctx.onboard(answers)
     errors = ctx.validate()
     build_registry(ws)
@@ -72,7 +80,12 @@ def cmd_init(args: argparse.Namespace) -> int:
 
         oid = ensure_objective(store, answers["objective"])
         print(f"Objective [{oid}] set: {answers['objective']}" if oid else "Objective already set (unchanged).")
-    print(f"Onboarded {ctx.company_name}. Config: {ws.config.relative_to(ws.root)}; canon: company-context/.")
+    print(f"Onboarded {ctx.company_name} in {ws.root}")
+    print(f"  config: {ws.config}")
+    print(f"  canon : {ws.root / 'company-context'}")
+    if ws.root != Path.cwd():
+        print(f"  (that is not the directory you ran this from; use --root {ws.root} "
+              "or REVENUEOS_ROOT to be explicit)")
     if errors:
         print("company-context validation:", *errors, sep="\n  ")
         return 1
@@ -775,6 +788,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--from", dest="from_url", help="derive the answers from this website (connect once)")
     s.add_argument("--no-llm", action="store_true", help="facts only, no model")
     s.add_argument("--answers", help="JSON file of answers (non-interactive)")
+    s.add_argument("--force", action="store_true",
+                   help="replace an existing company's config and canon in this workspace")
     s.set_defaults(fn=cmd_init)
     sub.add_parser("validate", help="run the company-context gate").set_defaults(fn=cmd_validate)
     s = sub.add_parser("demo", help="one command on any website: what is costing it customers, and what RevenueOS would fix")
