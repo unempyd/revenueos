@@ -357,6 +357,17 @@ def require_tier(ws: Workspace, minimum: Tier) -> str | None:
 FREE_DAYS_AFTER_FIRST_RESULT = 14
 
 
+
+def pro_checkout_url() -> str:
+    """The Pro checkout, overridable per deployment.
+
+    Hard-coding a vendor URL in the product is not ideal, but the alternative shipped worse: the
+    fallback was a sentence telling the customer to find a link on a page that did not have one.
+    An operator running their own instance sets the variable and this never applies.
+    """
+    return os.environ.get("REVENUEOS_PAYMENT_LINK_PRO") or "https://buy.stripe.com/eVq7sK3SAfVzfTd3WhfrW02"
+
+
 def pay_on_result(ws: Workspace, store: Any) -> dict[str, Any]:
     """The commercial rule in one place: everything runs free until the business has a measured result it
     agreed with (executed → measured), then FREE_DAYS_AFTER_FIRST_RESULT more days, then continuous operation
@@ -374,7 +385,7 @@ def pay_on_result(ws: Workspace, store: Any) -> dict[str, Any]:
                 "first_result_at": first, "days_left": left}
     return {"allowed": False, "tier": lic.tier.value, "first_result_at": first, "days_left": 0,
             "reason": (f"RevenueOS measured a result you agreed with on {first[:10]} and has run free for {FREE_DAYS_AFTER_FIRST_RESULT} days since. "
-                       f"Continuous operation now needs Pro (${TIER_PRICES[Tier.pro]}/mo): pay at the link on the pricing page, install the key with "
+                       f"Continuous operation now needs Pro (${TIER_PRICES[Tier.pro]}/mo): pay at {pro_checkout_url()}, install the key with "
                        "`revenueos license install <key>`. One-shot runs (`revenueos run …`) and the panel stay free.")}
 
 

@@ -263,7 +263,14 @@ def send_smtp(cfg: dict[str, Any], to_email: str, subject: str, text: str) -> st
     msg["From"] = f"{(cfg.get('sender') or {}).get('name') or sender} <{sender}>"
     msg["To"] = to_email
     msg["Subject"] = subject
-    msg["List-Unsubscribe"] = f"<mailto:{sender}?subject=stop>"
+    # Apple Mail renders a message carrying this header as "This message is from a mailing list"
+    # with an Unsubscribe banner above the first line. On genuine one-to-one outreach that is a
+    # misrepresentation and it undoes the personal framing the copy is built on. The header is a
+    # bulk-sender convention, so it is opt-in: a sender doing real volume wants it, and sets
+    # outreach.list_unsubscribe true. The opt-out itself lives in the body either way, which is
+    # what the Australian Spam Act actually requires.
+    if ((cfg.get("outreach") or {}).get("list_unsubscribe")):
+        msg["List-Unsubscribe"] = f"<mailto:{sender}?subject=stop>"
     msg.set_content(text)
     with smtplib.SMTP(host, port, timeout=30) as s:
         s.starttls()

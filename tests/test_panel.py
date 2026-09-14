@@ -128,7 +128,8 @@ def test_watch_it_work_details_the_site_audit(server, workspace, store, monkeypa
     monkeypatch.setattr(seo, "authority_gap", lambda *a, **k: None)
     monkeypatch.setattr(seo, "homepage_signals", lambda site, timeout=15.0: {"ok": True, "url": "https://acme-scheduling.example/", "meta_pixel": True, "google_ads_tag": False,
                                                                              "ga4": True, "booking_link": True, "tel_link": False, "phone_text": True, "local_schema": False, "canonical": True,
-                                                                             "phones": ["+61 8 5550 0100"], "emails": [], "booking_url": "/book"})
+                                                                             "phones": ["+61 8 5550 0100"], "phones_visible": ["+61 8 5550 0100"],
+                                 "phones_script_only": [], "emails": [], "booking_url": "/book"})
     srv, ctx = server
     cookie = "rs=" + make_token()
     _req(srv, "POST", "/onboard", urlencode(ANSWERS), cookie=cookie)  # the seo worker needs a website to read

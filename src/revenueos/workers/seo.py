@@ -104,6 +104,14 @@ def parse_signals(html: str, url: str) -> dict[str, Any]:
     text = re.sub(r"<style\b.*?</style>", " ", text, flags=re.S | re.I)
     text = re.sub(r"\sd=[\"'][^\"']*[\"']", " ", text)  # stray path data outside <svg>
     text = re.sub(r"[\u00a0\u2007\u202f\u2009]", " ", text)  # non-breaking and thin spaces inside numbers
+    # A number that appears ONLY inside <script> is not a number the page shows. Squarespace keeps
+    # its site config there and JSON-LD keeps `telephone` there, and a visitor sees neither. Three
+    # outreach emails were drafted telling real businesses their phone number was plain text on
+    # pages that display no phone number at all, entirely on that evidence. Scanning script stays,
+    # because site builders do render visible copy from JSON inside it, but the two sources stop
+    # being interchangeable: only a number found in visible markup can carry a claim about what a
+    # visitor sees.
+    visible_text = re.sub(r"<script\b.*?</script>", " ", text, flags=re.S | re.I)
     phones = []
     # Two more false-positive shapes, seen on real sites: a date/timestamp run embedded in an
     # image filename ("2024-09-11-14-47-06" reads as local number "09-11-14-47-06") and a SKU or
@@ -129,6 +137,14 @@ def parse_signals(html: str, url: str) -> dict[str, Any]:
             phones.append(ph)
     intl = [ph for ph in phones if ph.startswith("+")]
     out["phones"] = (intl or phones)[:3]  # a site that prints its country code is telling you which numbers are its own
+    # The same validated candidates, restricted to what renders.
+    seen_visible: list[str] = []
+    for m in re.finditer(boundary_pre + SIGNAL_PATTERNS["phone_text"] + boundary_post, visible_text):
+        ph = re.sub(r"\s+", " ", m.group(0)).strip()
+        if ph in out["phones"] and ph not in seen_visible:
+            seen_visible.append(ph)
+    out["phones_visible"] = seen_visible
+    out["phones_script_only"] = [ph for ph in out["phones"] if ph not in seen_visible]
     m = re.search(SIGNAL_PATTERNS["booking_link"], html, re.I)
     out["booking_url"] = re.search(r"href=[\"']([^\"']+)", m.group(0), re.I).group(1) if m else None
     out["emails"] = sorted({e.lower() for e in re.findall(r"mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", html, re.I)})[:4]
@@ -141,8 +157,8 @@ def signal_findings(site: str, signals: dict[str, Any]) -> list[dict[str, Any]]:
     url = signals.get("url") or site
     out = []
     facts = []
-    if signals.get("phones"):
-        facts.append("phone numbers shown on the page: " + ", ".join(signals["phones"]))
+    if signals.get("phones_visible"):
+        facts.append("phone numbers shown on the page: " + ", ".join(signals["phones_visible"]))
     if signals.get("booking_url"):
         facts.append(f"booking link: {signals['booking_url']}")
     if signals.get("emails"):
@@ -150,10 +166,13 @@ def signal_findings(site: str, signals: dict[str, Any]) -> list[dict[str, Any]]:
     observed = (" Observed: " + "; ".join(facts) + ".") if facts else ""
     # Gate on the validated, de-duplicated list rather than the raw regex hit:
     # the boolean stays true for any digit run that merely looked like a number.
-    if signals.get("phones") and not signals.get("tel_link"):
+    # Only a number the visitor can see supports "the homepage shows a phone number". With phones
+    # extracted but none of them visible, the page renders no number and there is no finding here.
+    if signals.get("phones_visible") and not signals.get("tel_link"):
         out.append({"kind": "phone_not_tappable", "url": url,
                     "why": "The homepage shows a phone number as plain text with no tel: link, so visitors on a phone cannot tap to call." + observed,
-                    "before": {"tel_link": False, "phone_text": True, "phones": signals.get("phones", [])}})
+                    "before": {"tel_link": False, "phone_text": True,
+                               "phones": signals.get("phones_visible", [])}})
     # Only a business that actually trades from a place should carry LocalBusiness
     # markup. Firing this on every site tells a B2B SaaS to add opening hours it
     # does not have — a fabricated finding. Require evidence of a physical

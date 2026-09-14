@@ -13,6 +13,17 @@ what changed.
 <p align="center"><strong>Connect once. Everything runs free. Pay when you agree with the result.</strong></p>
 
 <p align="center">
+Free forever to run by hand, including the web panel. Running continuously on a schedule is
+<strong>$99/month</strong>, and only after it has measured a result you agreed with, plus 14 days.
+</p>
+
+<p align="center">
+<a href="https://buy.stripe.com/eVq7sK3SAfVzfTd3WhfrW02"><strong>Start Pro</strong></a> ·
+<a href="https://unempyd.github.io/revenueos/pricing.html">Pricing</a> ·
+<a href="mailto:revenueos@icloud.com">Talk to a human</a>
+</p>
+
+<p align="center">
 <a href="https://pypi.org/project/revenueos/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/revenueos"></a>
 <a href="https://github.com/unempyd/revenueos/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/unempyd/revenueos/ci.yml?branch=main&label=ci"></a>
 <a href="LICENSE"><img alt="Licence MIT" src="https://img.shields.io/pypi/l/revenueos"></a>
