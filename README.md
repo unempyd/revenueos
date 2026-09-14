@@ -279,6 +279,13 @@ mailboxes, the connections listed above, 64 connector CLIs (analytics, CRM, emai
 enrichment) keyed by environment variables, and an optional external prospecting service.
 See [docs/integrations.md](docs/integrations.md).
 
+## MCP server
+
+`uvx --from "revenueos[mcp]" revenueos-mcp` runs RevenueOS as an MCP server over stdio for
+Claude Desktop, Claude Code, Cline, or another MCP host — 12 tools over the same workers as
+the CLI. [llms-install.md](llms-install.md) is the minimum an agent needs to set it up with
+no local clone; [mcp/README.md](mcp/README.md) is the full reference.
+
 ## Deployment
 
 `Dockerfile`, `docker-compose.yml` (orchestrator, panel, optional TLS proxy) and `deploy/`
