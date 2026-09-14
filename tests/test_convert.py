@@ -223,7 +223,10 @@ def test_licence_delivery_without_a_signing_key_says_what_is_missing(workspace, 
     """No signing key on this install (the conftest fixture clears every licence env var)."""
     out = convert.deliver_licenses(workspace, store, [{"email": "buyer@example.com", "customer": "cus_1",
                                                        "subscription": "sub_1", "current_period_start": 1789000000}])
-    assert out == {"issued": 0, "actions_created": 1, "skipped": 0, "secret": False}
+    # `delivered` and `mailbox` were added when a paid licence started sending itself; without a
+    # signing key there is no key to send, so nothing is delivered no matter what the mailbox says.
+    assert out["issued"] == 0 and out["actions_created"] == 1 and out["skipped"] == 0
+    assert out["secret"] is False and out["delivered"] == 0
     assert not (workspace.data / "licenses.jsonl").exists()
     d = [a for a in store.list_actions("pending") if (a["context"] or {}).get("kind") == "license_delivery"][0]
     assert convert.NO_SECRET_NOTE in d["content"]

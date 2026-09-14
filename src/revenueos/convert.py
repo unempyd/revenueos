@@ -262,12 +262,20 @@ def _license_body(email: str, key: str | None, expires_at: str) -> str:
             "Then `revenueos orchestrator` runs continuously.")
 
 
-def deliver_licenses(ws: Workspace, store: Store, customers: list[dict[str, Any]], *, run_id: int | None = None) -> dict[str, Any]:
+def deliver_licenses(ws: Workspace, store: Store, customers: list[dict[str, Any]], *,
+                     run_id: int | None = None, ctx: Any = None) -> dict[str, Any]:
     """For every paying customer with no licence row yet: mint the key (when the vendor's Ed25519
-    signing key is present), append the row to data/licenses.jsonl, and draft ONE delivery action.
-    Never sends."""
+    signing key is present), append the row to data/licenses.jsonl, and deliver it.
+
+    THE ONE EXCEPTION TO "WORKERS NEVER SEND", AND WHY IT IS NARROW. Everything else in RevenueOS
+    waits for a human, because everything else is the system's idea. This is not: the customer
+    asked for it by paying, and a key sitting in a queue while they wait is a broken purchase, not
+    a safeguard. The gate is Stripe itself — this runs only for an email the connected account
+    currently reports as an ACTIVE subscriber, so nothing but a real payment can trigger it, and the
+    only thing it can ever send is the licence template. Without a configured mailbox the action is
+    left pending exactly as before: nothing is lost, delivery is just slower."""
     can_sign = billing.signing_key() is not None
-    issued, created, skipped = 0, 0, 0
+    issued, created, skipped, delivered = 0, 0, 0, 0
     for cust in customers:
         email = (cust.get("email") or "").strip()
         if not email:
@@ -297,7 +305,48 @@ def deliver_licenses(ws: Workspace, store: Store, customers: list[dict[str, Any]
         aid = store.create_action("follow_up", f"Deliver Pro licence to {email}", _license_body(email, key, expires_at),
                                   run_id=run_id, dedupe_key=f"license:deliver:{email.lower()}:{period}", context=context)
         created += 1 if aid else 0
-    return {"issued": issued, "actions_created": created, "skipped": skipped, "secret": can_sign}
+        if aid and key and _mailbox_ready():
+            delivered += 1 if _deliver_now(ws, store, aid, ctx) else 0
+    return {"issued": issued, "actions_created": created, "skipped": skipped, "secret": can_sign,
+            "delivered": delivered, "mailbox": _mailbox_ready()}
+
+
+def _mailbox_ready() -> bool:
+    """A real send needs a password; a dry run counts, because it proves the path without posting."""
+    return bool(os.environ.get("SMTP_PASSWORD")) or os.environ.get("REVENUEOS_DRY_RUN") == "1"
+
+
+def _deliver_now(ws: Workspace, store: Store, action_id: int, ctx: Any = None) -> bool:
+    """Send the licence immediately and record it, or leave the action pending for a human.
+
+    A failure here must never lose the key: the licence row is already written, the action still
+    holds the body, and the next run finds it unsent. A buyer waiting is recoverable; a buyer with
+    no key and no record is not."""
+    from .context import BusinessContext
+    from .workers import execute_action
+
+    if not store.get_action(action_id):
+        return False
+    # BusinessContext(ws) is an EMPTY context: its config defaults to {}, so smtp.host is absent and
+    # every send fails with "SMTP not configured" even on a correctly configured workspace. Use the
+    # caller's loaded context, and load one only if we were given none.
+    ctx = ctx if ctx is not None else BusinessContext.load(ws)
+    try:
+        store.set_action_status(action_id, "approved")
+        outcome = execute_action(ws, store, ctx, None, store.get_action(action_id))
+        if str(outcome).strip().lower().startswith("not "):
+            store.set_action_status(action_id, "pending")
+            store.record_outcome(action_id, "pending", note=f"licence not delivered: {str(outcome)[:180]}")
+            return False
+        store.set_action_status(action_id, "executed")
+        store.record_outcome(action_id, "measured", metric="licence_delivered", before=0, after=1,
+                             note=f"paid subscription, key delivered automatically: {str(outcome)[:150]}")
+        return True
+    except Exception as exc:  # noqa: BLE001 — a delivery failure must leave the action recoverable
+        store.set_action_status(action_id, "pending")
+        store.record_outcome(action_id, "pending",
+                             note=f"licence delivery failed, still queued: {type(exc).__name__}: {exc}"[:220])
+        return False
 
 
 # ── measurement: did the offer convert? ──────────────────────────────────────

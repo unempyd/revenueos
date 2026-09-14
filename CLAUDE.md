@@ -29,9 +29,16 @@ docker compose up orchestrator panel; docker compose --profile outreach up      
 deploy/smoke.sh https://host                             # /health + /api/today
 ```
 
-Environment: LLM provider auto-detected (`REVENUEOS_LLM=anthropic|claude-cli|off`):
-`ANTHROPIC_API_KEY` / `ant auth login` → the Anthropic SDK (`REVENUEOS_MODEL`,
-`REVENUEOS_EFFORT`); otherwise a signed-in Claude Code CLI (`claude -p`).
+Environment: models are reached through an ordered provider chain that fails over on
+capacity failures only (rate limit, quota, overload, timeout, connection error, 5xx — never
+on a 4xx, an auth failure or a refusal). Auto-detected order: `ANTHROPIC_API_KEY` /
+`ant auth login` → the Anthropic SDK (`REVENUEOS_MODEL`, `REVENUEOS_EFFORT`); a signed-in
+Claude Code CLI (`claude -p`); then any OpenAI-compatible endpoint you point it at with
+`REVENUEOS_LLM_BASE_URL` + `REVENUEOS_LLM_MODEL` (+ `REVENUEOS_LLM_API_KEY`).
+`REVENUEOS_LLM` pins the chain (`off`, one name, or `anthropic,claude-cli`);
+`REVENUEOS_LLM_RETRIES` and `REVENUEOS_LLM_BUDGET` bound the work. `revenueos doctor`
+prints the chain in order; each call is recorded as an `llm_call` metric with no prompt or
+response text.
 `SMTP_PASSWORD`/`IMAP_PASSWORD` + `smtp.host`/`imap.host` in `revenueos.yaml` for real
 mail; `REVENUEOS_DRY_RUN=1` writes emails to `data/outputs/`. `REVENUEOS_PANEL_PASSWORD`,
 `REVENUEOS_WORKER_TOKEN`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,

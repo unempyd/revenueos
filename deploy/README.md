@@ -35,6 +35,45 @@ without once it's asked to bind non-loopback (see the table above).
 
 ## 2. First bring-up
 
+A published image exists at `ghcr.io/unempyd/revenueos`, built and pushed by
+`.github/workflows/publish-image.yml` for every tagged release (`linux/amd64`
+and `linux/arm64`, plus a `latest` tag tracking the newest non-prerelease).
+Pulling it skips the local build step; everything else — volumes, secrets,
+onboarding — is unchanged:
+
+```bash
+docker pull ghcr.io/unempyd/revenueos:latest   # or a pinned release, e.g. :0.2.5
+
+mkdir -p data logs company-context learning-loop
+echo "REVENUEOS_PANEL_PASSWORD=$(openssl rand -hex 24)" >> .env
+echo "REVENUEOS_WORKER_TOKEN=$(openssl rand -hex 24)" >> .env
+# ... plus ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN, SMTP_PASSWORD, etc. from §1
+
+docker run --rm -it \
+  --env-file .env \
+  -v "$PWD/data:/app/data" -v "$PWD/logs:/app/logs" \
+  -v "$PWD/company-context:/app/company-context" -v "$PWD/learning-loop:/app/learning-loop" \
+  -p 127.0.0.1:8791:8791 \
+  ghcr.io/unempyd/revenueos:latest \
+  revenueos init --answers company-answers.json   # or omit --answers for the interactive prompt
+
+docker run -d --name revenueos-panel \
+  --env-file .env \
+  -v "$PWD/data:/app/data" -v "$PWD/logs:/app/logs" \
+  -v "$PWD/company-context:/app/company-context" -v "$PWD/learning-loop:/app/learning-loop" \
+  -p 127.0.0.1:8791:8791 \
+  ghcr.io/unempyd/revenueos:latest \
+  revenueos serve --host 0.0.0.0 --port 8791
+```
+
+To run panel and orchestrator together sharing state exactly as described
+in the rest of this file (recommended for anything beyond a single-container
+trial), point `docker-compose.yml` at the published image instead of a
+local build — replace that file's `build: .` with
+`image: ghcr.io/unempyd/revenueos:latest` (or a pinned version) for the
+`panel` and `orchestrator` services — then continue from `docker compose up`
+below. Building from source instead of pulling:
+
 ```bash
 git clone <this repo> revenueos && cd revenueos
 scripts/fetch-upstream.sh

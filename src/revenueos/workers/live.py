@@ -35,14 +35,16 @@ class BillingWorker:
         for k in ("customers", "active_subscriptions", "mrr", "revenue_30d", "charges_30d", "open_invoices", "open_invoice_total"):
             store.record_metric(f"stripe_{k}", float(s.get(k) or 0), currency=s.get("currency"), livemode=s.get("livemode"))
         # Payment → licence, without a hosted webhook: who is paying, who has no key yet.
-        # Nothing is sent here; `deliver_licenses` only mints the key and drafts the delivery.
+        # This is the one place a worker sends: a customer who has paid gets their key immediately
+        # rather than waiting behind an approval queue. See deliver_licenses for why that exception
+        # is narrow and how it fails safe.
         from .. import convert
 
         paying = stripe_conn.paying_customers(conn)
         with_email = [c for c in paying if c.get("email")]
         store.record_metric("paying_customers", float(len(with_email)), livemode=s.get("livemode"))
         convert.write_customers_export(ws, paying)
-        lic = convert.deliver_licenses(ws, store, with_email, run_id=run_id)
+        lic = convert.deliver_licenses(ws, store, with_email, run_id=run_id, ctx=ctx)
         cur = (s.get("currency") or "usd").upper()
         tail = (f" · {len(with_email)} paying customer(s), {lic['issued']} licence(s) issued, "
                 f"{lic['actions_created']} delivery draft(s)" if paying else "")

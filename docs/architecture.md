@@ -101,11 +101,28 @@ approved action.
 | `discover` | Qualified prospects, from an optional external lead-generation service across a process boundary, or from CSV drops | — | Feeds `outreach`'s pipeline |
 | `outreach` | First-touch email drafts built from the business canon (deterministic hook + subject; an LLM personalises the opening line when one is available) | Sends the approved draft — subject to the daily cap and suppression list | Replies, bounces, and booked/pipeline value from the send record |
 | `inbox` | Replies, bounces, and STOP requests on the sending mailbox (or dropped `.eml` files) | — | Feeds `outreach`'s reply/bounce/booked outcomes |
+| `intake` | The business's own documents — PDF, Word, Excel, PowerPoint, CSV, RTF — dropped into `data/inbox/documents/`, and the places they contradict or fill a gap in the canon | Records the proposed correction in `learning-loop/CORRECTIONS.md` | — (a canon correction is recorded as `unmeasurable`, with a note that it shows up in the work it changes) |
 | `seo` | Crawl defects (missing or duplicate titles/descriptions, thin pages, no sitemap), a domain-authority gap against competitors, and — when a local site source is configured — concrete content/template surfaces | Runs the matching SEO skill on Execute | Re-crawls the page: fixed or not |
 | `ads-audit` | Wasted spend, over-pacing, and dangerous spend concentration in dropped ad exports | Runs the matching ads skill on Execute | The delta in the next export |
 | `content` | Skills from the capability packs that match the business's channels | Claude runs the skill and writes the deliverable | Whether the deliverable was written |
 | `monitor` | Public conversations (from a Hacker News search) that pass a strict, default-reject relevance gate against the business | — | — (a market signal is a prompt to act elsewhere, not itself measured) |
 | `measure` | — | — | Runs after execution and records one outcome per executed action, honestly: `pending` until evidence exists, `measured` or `no_effect` once it does, `unmeasurable` with a note on what would measure it |
+
+**Document intake.** A business does not want to retype its price list, brand guide or business
+plan into a questionnaire — it wants to hand the file over. Anything dropped into
+`data/inbox/documents/` is read by `src/revenueos/intake.py`, entirely on the machine RevenueOS
+runs on: PDF through pypdf, Word through python-docx, Excel through openpyxl, PowerPoint through
+python-pptx, CSV through the standard library and RTF through striprtf — all pure Python, all
+permissively licensed, no upload and no external binary such as `pdftotext` or `libreoffice`.
+Headings, slides, sheets and tables survive as structure rather than as a wall of text, hard caps
+on size, page count, expanded size and wall clock stop a hostile or enormous file from hanging a
+worker, and a file that cannot be parsed comes back with one plain sentence saying why — a scanned
+PDF is reported as a scan, never as a blank document. Each document is recorded in the `documents`
+table under its content hash (so a second run does nothing) with its extracted text in
+`data/documents/`, and where a model is available the `intake` worker compares the document to the
+business canon and proposes each contradiction or gap as a pending `correction` action quoting the
+document. Only the extracted text is ever sent to a model, and only a human approving that action
+changes anything — and then into `learning-loop/CORRECTIONS.md`, never into `company-context/`.
 
 ## Roles and the learning loop
 
@@ -227,6 +244,27 @@ without a webhook: the `billing` worker reads the connected Stripe account's act
 says so and issues nothing) and drafts a "Deliver Pro licence to `<email>`" action. `measure_offer`
 closes the loop honestly: an executed offer becomes `subscribed 0 → 1` only once that same address
 appears among the paying customers, and stays `pending` until it does.
+
+## Rendering a video
+
+RevenueOS could decide that a business needed a video and could not make one. `src/revenueos/creative.py`
+is the smallest honest version of that capability: a **brief** — a title and two to eight scenes, each a
+heading, up to three body lines, an optional literal mono line and a duration — is composed into HTML in
+the tokens of `website/design.css`, screenshotted scene by scene by a headless browser (Playwright when
+Node has it, otherwise a Chromium binary driven by `--screenshot`), and assembled by `ffmpeg` into an MP4,
+a WebM and a poster frame at 1920×1080 or 1080×1350. Rendering uses no network, no model, no clock and no
+randomness, so the same brief produces byte-identical files; ffmpeg is called bit-exact with its metadata
+stripped, and both it and the browser are separate processes, which is also the licence boundary — no
+AGPL video code is vendored, adapted or depended on. A missing ffmpeg or browser comes back as one
+sentence naming what to install, never a traceback and never a silent empty file. The model's only job is
+writing the brief: `creative.write_brief` asks for JSON and `parse_brief` validates every limit, so a
+brief whose heading would overflow the frame is refused rather than rendered. The `content` worker
+proposes one video a week for the first configured channel where a short motion asset is the native
+format (`creative.VIDEO_CHANNELS`) and proposes nothing at all when there is no model; the `render_video`
+executor (`workers/executors.py`) renders it only for an action whose status is `approved`, writes the
+files to `data/outputs/`, and records the path plus ffprobe's own reading of the duration, dimensions and
+codec on the action. Nothing is uploaded, posted or sent, so `measure` records it exactly as it records a
+text deliverable — `produced (not published)`, with no view, reach or engagement number invented.
 
 ## Capability packs
 

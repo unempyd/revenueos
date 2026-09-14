@@ -9,6 +9,8 @@ did into the action's outcome note; measure re-checks the effect afterwards.
     send_invoice  create and send a Stripe invoice to a lead                        → measured by Stripe paid status
     publish_post  publish a produced content deliverable to WordPress (a second, separate
                   approval from producing it)                                       → measured by fetching the URL
+    render_video  render the action's video brief to MP4/WebM in data/outputs/       → 'produced (not published)',
+                  (local only: nothing is uploaded, posted or sent)                     exactly like a text deliverable
 """
 from __future__ import annotations
 
@@ -226,6 +228,48 @@ def execute_publish_post(ws: Workspace, store: Store, ctx: BusinessContext, llm:
     return f"published {title!r} to {res.get('link')} (WordPress post {res.get('id')}, {res.get('status') or status})"
 
 
+def execute_render_video(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, action: dict[str, Any]) -> str:
+    """Render the video brief on an approved content action into data/outputs/.
+
+    This changes nothing outside the workspace: no upload, no post, no spend. It still runs only
+    behind Approve → Execute, because it is the step that turns a proposal into an asset the
+    business will put its name on. Rendering is deterministic and needs no model and no network:
+    the model's work (writing the brief) already happened in the content worker.
+    """
+    from ..creative import BriefError, parse_brief, probe, render_video
+
+    c = _ctx(action)
+    if (action.get("status") or "") not in ("approved", "executed"):
+        return (f"not rendered: action {action['id']} has not been approved "
+                f"(status {action.get('status') or 'unknown'}); approve it first")
+    raw = c.get("video_brief")
+    if not raw:
+        return "not rendered: this action carries no video brief"
+    try:
+        # media_root: a shot list that names footage this workspace does not have is refused here,
+        # by name, rather than rendering a black rectangle where the product should be
+        brief = parse_brief(raw, media_root=ws.root)
+    except BriefError as exc:
+        return f"not rendered: {exc}"
+
+    stem = re.sub(r"[^a-z0-9]+", "-", f"{datetime.now(UTC):%Y%m%d}-video-{brief.title}-{action['id']}".lower()).strip("-")
+    result = render_video(brief, ws.outputs, stem=stem, workspace=ws.root)
+    if not result.ok:
+        return f"not rendered: {result.error}"
+
+    rel = {kind: str(path.relative_to(ws.root)) for kind, path in
+           (("video", result.mp4), ("video_webm", result.webm), ("video_poster", result.poster)) if path}
+    measured = probe(result.mp4)  # what ffprobe read back, not what we asked for
+    store.update_action_context(
+        action["id"], **rel, video_seconds=measured.get("seconds", result.seconds),
+        video_width=measured.get("width", result.width), video_height=measured.get("height", result.height),
+        video_codec=measured.get("codec"), video_bytes=measured.get("bytes"),
+        video_renderer=result.renderer, rendered_at=datetime.now(UTC).isoformat(timespec="seconds"),
+    )
+    return (f"rendered {rel.get('video')} — {result.sentence()}; produced, not published "
+            f"(nothing was uploaded or posted anywhere)")
+
+
 def execute_send_invoice(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, action: dict[str, Any]) -> str:
     from ..connections import stripe_conn
 
@@ -249,4 +293,5 @@ EXECUTORS = {
     "book_call": execute_book_call,
     "send_invoice": execute_send_invoice,
     "publish_post": execute_publish_post,
+    "render_video": execute_render_video,
 }

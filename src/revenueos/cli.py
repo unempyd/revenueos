@@ -20,7 +20,7 @@ from pathlib import Path
 
 from . import __version__
 from .context import QUESTIONS, BusinessContext
-from .llm import LLM, maybe_llm
+from .llm import LLM, chain_status, maybe_llm
 from .paths import Workspace, is_workspace
 from .registry import build_registry, load_registry, search_skills
 from .store import Store
@@ -224,6 +224,69 @@ def _decide(args: argparse.Namespace, verb: str) -> int:
         return 1
 
 
+def cmd_intake(args: argparse.Namespace) -> int:
+    """Read one business document now and say what was found. Extraction is entirely local."""
+    from .intake import read_document
+    from .workers.intake import _slug
+
+    ws, store, _ctx = _boot(args)
+    doc = read_document(args.path)
+    if args.json:
+        print(json.dumps(doc.as_json(), indent=2))
+        return 0 if doc.ok else 2
+    print(doc.path.name)
+    if not doc.ok:
+        print(f"  could not read it: {doc.error}")
+        return 2
+    size = f"{doc.size_bytes / 1024:.0f} KB" if doc.size_bytes < 1048576 else f"{doc.size_bytes / 1048576:.1f} MB"
+    unit = f", {doc.pages} {doc.unit}{'s' if doc.pages != 1 else ''}" if doc.pages is not None else ""
+    print(f"  format     {doc.format}{unit}, {size} on disk")
+    for key in ("title", "author", "created", "subject"):
+        if doc.metadata.get(key):
+            print(f"  {key:<10} {doc.metadata[key][:90]}")
+    print(f"  text       {doc.chars:,} characters" + (" (truncated)" if doc.truncated else ""))
+    for t in doc.tables:
+        print(f"  table      {t.name}: {len(t.rows)} row(s) × {len(t.rows[0]) if t.rows else 0} column(s)")
+    for note in doc.notes:
+        print(f"  note       {note}")
+    stored = ""
+    if not args.dry_run:
+        out = ws.documents / f"{doc.sha256[:8]}-{_slug(doc.path.stem)}.md"
+        out.write_text(doc.as_markdown(), encoding="utf-8")
+        stored = str(out.relative_to(ws.root))
+        store.record_document(path=str(doc.path), sha256=doc.sha256, format=doc.format, pages=doc.pages,
+                              chars=doc.chars, title=doc.title, text_path=stored, error=doc.error)
+        print(f"  stored     {stored} (sha256 {doc.sha256[:12]})")
+    preview = [ln for ln in doc.text.splitlines() if ln.strip()][: args.lines]
+    if preview:
+        print(f"\n  ── what it says (first {len(preview)} non-blank lines) ──")
+        for ln in preview:
+            print("  " + ln[:120])
+    return 0
+
+
+def cmd_documents(args: argparse.Namespace) -> int:
+    _ws, store, _ctx = _boot(args)
+    rows = store.list_documents(limit=args.limit)
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    if not rows:
+        print("No documents read yet. Drop a PDF, Word file, spreadsheet or deck into data/inbox/documents/ "
+              "and run `revenueos run intake`, or read one now with `revenueos intake <file>`.")
+        return 0
+    print(f"{'READ':<11} {'FORMAT':<7} {'UNITS':>6} {'CHARS':>9}  TITLE")
+    for r in rows:
+        units = str(r["pages"]) if r["pages"] is not None else "—"
+        print(f"{(r['extracted_at'] or '')[:10]:<11} {r['format']:<7} {units:>6} {r['chars']:>9,}  {(r['title'] or '')[:54]}")
+        if r["error"]:
+            print(f"{'':<11} could not be read: {r['error'][:100]}")
+        elif r["summary"]:
+            print(f"{'':<11} {r['summary'][:110]}")
+    print(f"\n{len(rows)} document(s).")
+    return 0
+
+
 def cmd_skills(args: argparse.Namespace) -> int:
     ws, _store, _ctx = _boot(args)
     if args.sub == "index":
@@ -281,6 +344,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     ]
     for name, detail, ok in checks:
         print(f"{'✓' if ok else '✗'} {name:<36} {detail}")
+    chain = chain_status()
+    print("\nmodel routing — tried in this order, failing over on rate limits, outages and timeouts:")
+    for pos, p in enumerate(chain, 1):
+        print(f"{'✓' if p['ready'] else '✗'} {pos}. {p['name']:<33} {p['model']} — {p['detail']}")
+    if not chain:
+        print("  none (REVENUEOS_LLM=off, or no credential): workers run without a model.")
     return 0
 
 
@@ -723,6 +792,18 @@ def build_parser() -> argparse.ArgumentParser:
         s = sub.add_parser(verb, help=f"{verb} an action from TODAY")
         s.add_argument("id", type=int)
         s.set_defaults(fn=lambda a, v=verb: _decide(a, v))
+
+    s = sub.add_parser("intake", help="read one business document (PDF, Word, Excel, PowerPoint, CSV, RTF) and say what is in it")
+    s.add_argument("path")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--dry-run", action="store_true", help="print what was found without recording the document")
+    s.add_argument("--lines", type=int, default=20, help="how many lines of the extracted text to show")
+    s.set_defaults(fn=cmd_intake)
+
+    s = sub.add_parser("documents", help="the documents the business has handed over and what was read from them")
+    s.add_argument("--limit", type=int, default=50)
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_documents)
 
     s = sub.add_parser("skills", help="the unified skill catalogue")
     s.add_argument("sub", choices=["index", "list", "search", "show"])

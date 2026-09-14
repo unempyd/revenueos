@@ -45,13 +45,14 @@ def all_workers() -> dict[str, Worker]:
     from .growth import GrowthWorker
     from .heartbeat import HeartbeatWorker
     from .inbox import InboxWorker
+    from .intake import IntakeWorker
     from .live import AdsLiveWorker, AnalyticsWorker, BillingWorker
     from .measure import MeasureWorker
     from .monitor import MonitorWorker
     from .outreach import OutreachWorker
     from .seo import SeoWorker
 
-    workers: list[Worker] = [DiscoverWorker(), OutreachWorker(), InboxWorker(), SeoWorker(), AdsAuditWorker(), ContentWorker(), MonitorWorker(),
+    workers: list[Worker] = [DiscoverWorker(), OutreachWorker(), InboxWorker(), IntakeWorker(), SeoWorker(), AdsAuditWorker(), ContentWorker(), MonitorWorker(),
                              MeasureWorker(), GrowthWorker(), BillingWorker(), AnalyticsWorker(), AdsLiveWorker(),
                              HeartbeatWorker()]
     return {w.name: w for w in workers}
@@ -82,9 +83,11 @@ def execute_action(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM |
     executor = (action.get("context") or {}).get("executor")
     from .content import execute_content
     from .executors import EXECUTORS
+    from .intake import execute_record_correction
     from .outreach import execute_send
 
-    table = {"send_email": execute_send, "run_skill": execute_content, **EXECUTORS}
+    table = {"send_email": execute_send, "run_skill": execute_content,
+             "record_correction": execute_record_correction, **EXECUTORS}
     fn = table.get(executor)
     if fn is None:
         return f"action {action['id']} has no automatic executor ({executor!r}); do it by hand and mark it executed."

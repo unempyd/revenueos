@@ -225,6 +225,20 @@ CREATE TABLE IF NOT EXISTS messages (
     read_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_agent, read_at, id);
+
+CREATE TABLE IF NOT EXISTS documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL,                 -- where the business dropped it
+    sha256 TEXT NOT NULL UNIQUE,        -- content hash: re-running intake on the same bytes does nothing
+    format TEXT NOT NULL,               -- pdf | docx | xlsx | pptx | csv | text | rtf | unknown
+    pages INTEGER,                      -- pages/sheets/slides, NULL when the format carries no count
+    chars INTEGER NOT NULL DEFAULT 0,
+    title TEXT,
+    extracted_at TEXT NOT NULL,
+    text_path TEXT,                     -- data/documents/<sha8>-<name>.md, the extracted text
+    summary TEXT,                       -- what it says about the business (needs a model)
+    error TEXT                          -- why it could not be read, in one sentence
+);
 """
 
 
@@ -532,6 +546,35 @@ class Store:
                  json.dumps(after, default=str) if after is not None else None, note),
             )
             return int(cur.lastrowid)
+
+    # ── documents (what the business handed over) ───────────────────────────
+    def record_document(self, *, path: str, sha256: str, format: str, pages: int | None, chars: int,
+                        title: str | None = None, text_path: str | None = None, summary: str | None = None,
+                        error: str | None = None) -> int | None:
+        """Idempotent on the content hash: the same bytes are never read twice. Returns the new
+        row id, or None when this document was already recorded."""
+        with self._conn() as c:
+            if c.execute("SELECT 1 FROM documents WHERE sha256=?", (sha256,)).fetchone():
+                return None
+            cur = c.execute(
+                "INSERT INTO documents (path, sha256, format, pages, chars, title, extracted_at, text_path, summary, error)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (path, sha256, format, pages, chars, title, now(), text_path, summary, error),
+            )
+            return int(cur.lastrowid)
+
+    def get_document(self, sha256: str) -> dict[str, Any] | None:
+        with self._conn() as c:
+            row = c.execute("SELECT * FROM documents WHERE sha256=?", (sha256,)).fetchone()
+            return dict(row) if row else None
+
+    def list_documents(self, limit: int = 200) -> list[dict[str, Any]]:
+        with self._conn() as c:
+            return [dict(r) for r in c.execute("SELECT * FROM documents ORDER BY id DESC LIMIT ?", (limit,))]
+
+    def set_document_summary(self, sha256: str, summary: str) -> None:
+        with self._conn() as c:
+            c.execute("UPDATE documents SET summary=? WHERE sha256=?", (summary, sha256))
 
     def latest_outcome(self, action_id: int) -> dict[str, Any] | None:
         with self._conn() as c:

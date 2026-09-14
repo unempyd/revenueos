@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any
 
 from ..context import BusinessContext
@@ -18,6 +19,8 @@ from ..paths import Workspace
 from ..store import Store
 from ..vendor.pulse.discovery import make_discovery_tools
 from . import WorkerResult
+
+HN_ITEM = "https://hacker-news.firebaseio.com/v0/item/{id}.json"
 
 
 class _BrainStore:
@@ -41,6 +44,43 @@ async def _find(ctx: BusinessContext, llm: LLM | None, days_back: int) -> dict[s
         return {"ok": False, "error": raw[:300]}
 
 
+def _hn_id(url: str) -> str:
+    m = re.search(r"[?&]id=(\d+)", url or "")
+    return m.group(1) if m else ""
+
+
+def live_on_hn(url: str, client: Any = None) -> tuple[bool, str]:
+    """Is this thread still alive on Hacker News?
+
+    The search index the discovery tool uses does not carry moderation state — it simply drops
+    what has been killed, which means a thread can be indexed, surfaced to a customer, and dead by
+    the time they open it. Firebase does carry it: a flagged item returns `dead: true` with its
+    text replaced by `[flagged]`. Verified against a real flagged comment on 2026-09-14. One HTTP
+    call per candidate, no model, and it fails open: if the check itself cannot run we keep the
+    thread rather than silently dropping the worker's output.
+    """
+    import httpx
+
+    hid = _hn_id(url)
+    if not hid:
+        return True, ""
+    try:
+        c = client or httpx.Client(timeout=10)
+        r = c.get(HN_ITEM.format(id=hid))
+        if r.status_code != 200:
+            return True, ""
+        item = r.json()
+    except Exception:  # noqa: BLE001 — a monitoring check must never sink the run
+        return True, ""
+    if not isinstance(item, dict):
+        return True, ""
+    if item.get("deleted"):
+        return False, "deleted on Hacker News"
+    if item.get("dead"):
+        return False, "flagged or killed on Hacker News"
+    return True, ""
+
+
 class MonitorWorker:
     name = "monitor"
     description = "Find conversations (Hacker News) where the business genuinely belongs; propose an angle."
@@ -59,8 +99,13 @@ class MonitorWorker:
             return WorkerResult(ok=True, summary=f"0 conversation(s) worth joining; {result.get('found', 0)} candidate thread(s) found, "
                                                  "none judged (no LLM credential — connect one to gate them).",
                                 actions_created=0, details={"found": result.get("found", 0), "gated": False, "candidates": len(result.get("items", []))})
+        skipped = []
         for item in result.get("items", []):
             url = item.get("hn_url")
+            alive, why = live_on_hn(url)
+            if not alive:
+                skipped.append(why)
+                continue
             title = item.get("title") or "(untitled thread)"
             body = item.get("why_relevant") or item.get("snippet") or ""
             angle = item.get("suggested_angle")
@@ -77,5 +122,7 @@ class MonitorWorker:
             gate = "no candidate threads matched the search seeds"
         else:
             gate = "ungated (no LLM credential — recency only)"
-        return WorkerResult(ok=True, summary=f"{created} conversation(s) worth joining; {result.get('found', 0)} relevant thread(s) found.",
-                            actions_created=created, details={"found": result.get("found", 0), "gated": result.get("gated"), "gate": gate})
+        note = f" {len(skipped)} dropped as flagged or deleted." if skipped else ""
+        return WorkerResult(ok=True, summary=f"{created} conversation(s) worth joining; {result.get('found', 0)} relevant thread(s) found.{note}",
+                            actions_created=created, details={"found": result.get("found", 0), "gated": result.get("gated"), "gate": gate,
+                                                              "skipped_dead": len(skipped)})

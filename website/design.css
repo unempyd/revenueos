@@ -90,14 +90,13 @@ header.topnav{
 header.topnav.is-scrolled{border-bottom-color:var(--smoke)}
 .topnav .row{display:flex;align-items:center;gap:16px;padding-block:12px;flex-wrap:nowrap}
 .brand{font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--frost);gap:9px}
-/* The mark is masked, not drawn: it takes `currentColor`, so it is frost on this black
-   header and ink anywhere the ground is light — one file, both semantics, no second asset.
-   logo-mark.svg is the 8-element cut; the full 24-element logo.svg turns to mush under
-   about 40px, the same optical-size reasoning type gets. */
+/* The owner's mark, as supplied. Masked rather than drawn so it takes `currentColor`:
+   frost on this black header, ink anywhere the ground is light — one file, both semantics.
+   Drawn at 24px rather than 20 because the full mark needs the extra pixels to read. */
 .brand .dot{
-  width:20px;height:20px;border-radius:0;background:currentColor;
-  -webkit-mask:url(logo-mark.svg) center/contain no-repeat;
-  mask:url(logo-mark.svg) center/contain no-repeat;
+  width:24px;height:24px;border-radius:0;background:currentColor;
+  -webkit-mask:url(logo.svg) center/contain no-repeat;
+  mask:url(logo.svg) center/contain no-repeat;
 }
 nav.links{display:flex;gap:2px;margin-inline:auto;flex-wrap:nowrap}
 nav.links a{

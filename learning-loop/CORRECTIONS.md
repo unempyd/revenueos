@@ -6,6 +6,12 @@ Pattern source: Sabrina Ramonov's two-layer memory model (immutable playbook plu
 
 ---
 
+## 2026-09-14 — copy assembled from the ledger reads as machine-written, and the audience says so
+**Context:** the Hacker News submission (news.ycombinator.com/item?id=49683832, 2026-09-13 13:33 UTC) reached 6 points and 5 comments. Two of the five called the copy "AI slop" — one unprompted, one replying directly to our first comment asking for "a human to write your blurb". A genuine question from `graemep` (why the name ends in OS) was answered with a long structured comment, and that reply is now `[flagged]`. The copy had been produced by RevenueOS's own skills from its own ledger, which is exactly why it read that way: assembled from records rather than written by someone with something to say.
+**Correction:** public copy is not a ledger rendering. If a paragraph could have been assembled from stored facts, it is not ready to post. Lead with the single most falsifiable sentence; state what is not proven before anyone asks; keep a launch comment under 100 words; never answer a one-line question with a wall of structure — match the length and register of what was asked. A comment that lists capabilities is worse than one that admits a limit.
+**Apply when:** drafting any public post, comment, reply, launch copy, directory description or README paragraph — every surface a stranger reads
+**Source:** hacker news thread 49683832
+
 ## Format
 
 Each correction is its own dated block. Append new corrections to the TOP. Never delete. Historical corrections explain why rules exist.

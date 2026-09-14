@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from .context import BusinessContext
 from .llm import maybe_llm
@@ -32,8 +33,10 @@ mcp = FastMCP(
     "revenueos",
     instructions=(
         "RevenueOS Community: connect a business, run its capability workers, and see what they found. "
-        "Nothing sends, publishes or spends — call revenueos_approve then revenueos_execute to act on any "
-        "action; everything else is read-only analysis. Start with revenueos_today."
+        "Nothing sends, publishes or spends except revenueos_execute, which acts only on an action already "
+        "approved with revenueos_approve. The worker tools read the outside world and write findings into "
+        "this workspace; they never act on it. Each tool's annotations say which is which. "
+        "Start with revenueos_today."
     ),
 )
 
@@ -56,7 +59,29 @@ def _run(name: str) -> dict[str, Any]:
 
 
 # ── tools ─────────────────────────────────────────────────────────────────
-@mcp.tool()
+# Tool annotations are hints a host shows the user before it lets a model call a tool, so
+# they are written from what the code below actually does, not from what is convenient:
+#   readOnlyHint      true only when the tool changes nothing but the SQLite schema `Store()`
+#                     creates on first open. Anything that writes an action, a draft, a lead,
+#                     an outcome or a file is false.
+#   destructiveHint   true only for revenueos_execute, the single tool that acts on the world
+#                     (SMTP send, site deploy, campaign pause/budget, invoice, deliverable).
+#                     A tool that writes to the store but changes nothing outside it is false.
+#   idempotentHint    true where repeating the call adds nothing: every worker passes a
+#                     `dedupe_key` to `create_action`, and approve/ignore set a status.
+#                     False for revenueos_execute — a second execute is a second send.
+#   openWorldHint     true when the call can reach a host off this machine: the configured
+#                     model provider, a crawl target, an ad platform, IMAP/SMTP, a lead source.
+@mcp.tool(
+    title="Today's revenue brief",
+    annotations=ToolAnnotations(
+        title="Today's revenue brief",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 def revenueos_today() -> dict[str, Any]:
     """The RevenueOS Community brief: pending opportunities awaiting a decision, current
     pipeline value, and the latest metrics for this connected business. Call this first to
@@ -67,7 +92,16 @@ def revenueos_today() -> dict[str, Any]:
             "metrics": brief.metrics, "offer": brief.offer}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Results and measured outcomes",
+    annotations=ToolAnnotations(
+        title="Results and measured outcomes",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 def revenueos_results() -> dict[str, Any]:
     """What RevenueOS Community has done and what measurable result occurred: every executed
     action with its outcome (emails sent, replies, SEO fixes confirmed by re-crawl, ad spend
@@ -77,7 +111,16 @@ def revenueos_results() -> dict[str, Any]:
     return {"summary": brief.summary, "results": brief.results}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Run a RevenueOS worker",
+    annotations=ToolAnnotations(
+        title="Run a RevenueOS worker",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 def revenueos_run(worker: str) -> dict[str, Any]:
     """Run one RevenueOS Community worker now and return what it found: discover, outreach,
     inbox, seo, ads-audit, content, monitor, measure, or "all" to run every worker in order.
@@ -85,7 +128,16 @@ def revenueos_run(worker: str) -> dict[str, Any]:
     return _run(worker)
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Audit the website for SEO defects",
+    annotations=ToolAnnotations(
+        title="Audit the website for SEO defects",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 def revenueos_seo_audit(website: str | None = None) -> dict[str, Any]:
     """RevenueOS SEO Auditor: crawl the business's website for missing titles/descriptions,
     thin pages, duplicate titles and a missing sitemap, and compare domain authority against
@@ -101,7 +153,19 @@ def revenueos_seo_audit(website: str | None = None) -> dict[str, Any]:
     return {"result": result.as_json(), "actions": actions}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Audit an ad platform export (overwrites the staged export)",
+    annotations=ToolAnnotations(
+        title="Audit an ad platform export (overwrites the staged export)",
+        readOnlyHint=False,
+        # It copies the given CSV over data/exports/ads-<platform>.csv, replacing whatever export
+        # was staged there. That is RevenueOS's own slot, but the bytes came from the customer and
+        # the previous file is gone, so a host deciding whether to auto-approve should be told.
+        destructiveHint=True,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 def revenueos_ads_audit(csv_path: str, platform: str) -> dict[str, Any]:
     """RevenueOS Ads Auditor: ingest an ad platform export and flag wasted spend, over-pacing
     campaigns and dangerous spend concentration. `csv_path` must be the 13-column claude-ads
@@ -118,7 +182,16 @@ def revenueos_ads_audit(csv_path: str, platform: str) -> dict[str, Any]:
     return result.as_json()
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Discover and qualify leads",
+    annotations=ToolAnnotations(
+        title="Discover and qualify leads",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 def revenueos_discover_leads(csv_path: str | None = None) -> dict[str, Any]:
     """RevenueOS Lead Discovery: read prospects from OpenOutreach (when installed, across a
     process boundary) and any CSV drop already in data/exports/, then run the qualification
@@ -136,7 +209,16 @@ def revenueos_discover_leads(csv_path: str | None = None) -> dict[str, Any]:
     return result.as_json()
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Draft outreach emails (never sends)",
+    annotations=ToolAnnotations(
+        title="Draft outreach emails (never sends)",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 def revenueos_draft_followups() -> dict[str, Any]:
     """RevenueOS Sales Follow-up: draft first-touch cold emails for newly discovered
     prospects from the business's own canon (offer, differentiators, pain points). Drafts
@@ -146,7 +228,16 @@ def revenueos_draft_followups() -> dict[str, Any]:
     return _run("outreach")
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Approve a pending action",
+    annotations=ToolAnnotations(
+        title="Approve a pending action",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 def revenueos_approve(action_id: int) -> dict[str, Any]:
     """Approve a pending action from revenueos_today so it can be executed. Approving alone
     never sends, publishes or spends anything — call revenueos_execute afterwards to act."""
@@ -160,7 +251,16 @@ def revenueos_approve(action_id: int) -> dict[str, Any]:
     return {"ok": True, "action_id": action_id, "title": action["title"], "status": "approved"}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Execute an approved action (sends, publishes or spends)",
+    annotations=ToolAnnotations(
+        title="Execute an approved action (sends, publishes or spends)",
+        readOnlyHint=False,
+        destructiveHint=True,
+        idempotentHint=False,
+        openWorldHint=True,
+    ),
+)
 def revenueos_execute(action_id: int) -> dict[str, Any]:
     """Execute an approved action: send the drafted email, or run the matching SKILL.md
     (SEO fix, ads recommendation, content deliverable) against the business context. This is
@@ -183,7 +283,16 @@ def revenueos_execute(action_id: int) -> dict[str, Any]:
         return {"ok": False, "action_id": action_id, "error": f"{type(exc).__name__}: {exc}"}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Dismiss a pending action",
+    annotations=ToolAnnotations(
+        title="Dismiss a pending action",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 def revenueos_ignore(action_id: int) -> dict[str, Any]:
     """Dismiss a pending action from revenueos_today without acting on it."""
     _ws, store, _ctx = _boot()
@@ -194,7 +303,16 @@ def revenueos_ignore(action_id: int) -> dict[str, Any]:
     return {"ok": True, "action_id": action_id, "title": action["title"], "status": "ignored"}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Measure what executed actions changed",
+    annotations=ToolAnnotations(
+        title="Measure what executed actions changed",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
 def revenueos_measure() -> dict[str, Any]:
     """RevenueOS Revenue Monitor: check every executed action for a measurable result — an
     SEO re-crawl, a reply or bounce on a sent email, the next ad export's spend delta, or a
@@ -203,7 +321,16 @@ def revenueos_measure() -> dict[str, Any]:
     return _run("measure")
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Search the skill catalogue",
+    annotations=ToolAnnotations(
+        title="Search the skill catalogue",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 def revenueos_search_skills(query: str, limit: int = 10) -> list[dict[str, Any]]:
     """RevenueOS Marketing Intelligence: search the unified skill catalogue (SEO, ads, cold
     email, content, growth — hundreds of vendored playbooks) for a topic and return matching
@@ -213,7 +340,16 @@ def revenueos_search_skills(query: str, limit: int = 10) -> list[dict[str, Any]]
     return search_skills(ws, query, limit=limit)
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Lessons from measured results",
+    annotations=ToolAnnotations(
+        title="Lessons from measured results",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 def revenueos_lessons(days: int = 60) -> dict[str, Any]:
     """What RevenueOS learned from this business's own measured results: one dated lesson per
     executed action that was measured (what was attempted, what the evidence showed, what to do

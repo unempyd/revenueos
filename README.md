@@ -39,10 +39,6 @@ what changed.
 5. **Measure.** It re-reads the live account and records before → after next to the action.
 6. **Pay.** Nothing is charged until it has measured a result you agreed with.
 
-<p align="center">
-  <img src="assets/loop.svg" alt="The loop: connect once, discover, you approve, execute, measure, you agree, pay — with measured results ranking what comes next" width="100%">
-</p>
-
 ## Try it on your site in one command
 
 ```bash
@@ -120,12 +116,12 @@ The longer version is in [docs/architecture.md](docs/architecture.md).
 
 ## What the customer sees
 
+<p align="center"><img src="assets/watch-it-work.gif" alt="A real run of the control panel: Connect, Discover, Analyse and Measure light up as the checks complete, Approve and Execute stay dark, and the log ends: Done — 1 new opportunity waiting for your decision" width="820"></p>
+
 <p align="center"><img src="website/screenshots/today-current.png" alt="RevenueOS TODAY: opportunities found for the connected business, each with Approve, Execute and Ignore" width="820"></p>
 
-<p align="center"><img src="website/screenshots/results-current.png" alt="RevenueOS RESULTS: what was executed and the measured outcome, deliverable_written 0 to 1" width="820"></p>
-
-Both screens are from a live run against a real company's public web presence, read-only,
-with no email sent to anyone. Nothing in them is mocked.
+The run above and the brief below are from a live run against a real company's public web
+presence, read-only, with no email sent to anyone. Nothing in them is mocked.
 
 ## Workers
 
@@ -139,7 +135,8 @@ with no email sent to anyone. Nothing in them is mocked.
 | `discover` | prospects from lead lists or an external prospecting service, through the qualification gate (business email, business website, real company name; reported as found · contactable · qualified) | none | via outreach |
 | `outreach` | first-touch drafts from your business canon, re-verified against the live page before sending | sends, under a daily cap, a suppression list and an unsubscribe footer | replies, booked, pipeline value |
 | `inbox` | replies, bounces and STOP requests on your mailbox | none | feeds outreach outcomes |
-| `content` | content work matched to your channels | the deliverable, then `publish_post` to WordPress after a second approval | published 0 → 1 on the live URL |
+| `intake` | your own documents, dropped into `data/inbox/documents/`: PDF, Word, Excel, PowerPoint, CSV and RTF read entirely on your machine, tables kept as rows; with a model, where a document contradicts or fills a gap in your business canon | records the proposed correction in `learning-loop/CORRECTIONS.md`, which every worker prompt then reads — `company-context/` is never edited by a worker | none directly: a canon correction shows up in the work it changes, and is recorded as `unmeasurable` with that note |
+| `content` | content work matched to your channels; a short video brief when one of your channels is a video channel | the deliverable, then `publish_post` to WordPress after a second approval; `render_video` renders the approved brief to MP4/WebM in `data/outputs/` | published 0 → 1 on the live URL; a rendered video is `produced (not published)` |
 | `monitor` | Hacker News threads that pass a default-reject relevance gate | none | none |
 | `growth` | external adoption numbers for your own surfaces: GitHub traffic, PyPI downloads, site reachability | none | recorded as metrics with a delta |
 | `heartbeat` | the state of your objective: what is pending, approved but not run, measured, failed or blocked | none | writes one dated event per run |
@@ -239,8 +236,11 @@ uv run revenueos init
 
 Requirements: Python 3.12+, and Node 20+ for the scheduler and the connector CLIs.
 
-An LLM is used if one is present: `ANTHROPIC_API_KEY`, otherwise a signed-in Claude Code
-CLI. Without either, the deterministic half still runs: the site crawl and its findings, the
+An LLM is used if one is present. RevenueOS tries them in order and moves to the next one by
+itself when a provider is rate limited, overloaded or unreachable: `ANTHROPIC_API_KEY`, then a
+signed-in Claude Code CLI, then any OpenAI-compatible endpoint you point it at with
+`REVENUEOS_LLM_BASE_URL` + `REVENUEOS_LLM_MODEL`. `revenueos doctor` shows the order and which
+ends are reachable. Without any of them, the deterministic half still runs: the site crawl and its findings, the
 ad-export waste, pacing and concentration checks, search-term waste, lead qualification,
 inbox replies and bounces, templated outreach drafts, content matching, and all measurement.
 Four things do need a model, and say so rather than pretending: executing any action whose
@@ -290,6 +290,66 @@ upstream repositories, and the code in `src/revenueos/` is the glue: business co
 store, orchestration, approval surface, measurement and billing. Do not edit anything under
 `src/revenueos/vendor/`, `skills/`, `agents/` or `tools/`; those are regenerated by
 `scripts/vendor.py`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Privacy
+
+Full policy: **<https://unempyd.github.io/revenueos/privacy.html>**. The short version,
+written from what the code does rather than from a template:
+
+**RevenueOS is self-hosted software, not a service.** You run it on your own machine or
+server. The RevenueOS project operates no backend, receives no copy of your data and has no
+way to reach your workspace. There is no telemetry, no usage reporting, no crash reporting
+and no analytics of any kind. Nothing in the product ever calls a RevenueOS-operated host:
+licences are HMAC-signed keys verified locally by `billing.py`, so even licensing contacts
+no server. (Verified by enumerating every outbound host literal and every network primitive
+— `httpx`, `urllib`, `socket`, `smtplib`, `imaplib`, `subprocess` — in the shipped tree,
+`src/revenueos/` included, on 2026-09-14.)
+
+**What leaves your machine, and only because you configured it:**
+
+| Destination | When | What is sent |
+|---|---|---|
+| Your model provider — `api.anthropic.com` (`ANTHROPIC_API_KEY`), the signed-in Claude Code CLI, or an OpenAI-compatible endpoint you set with `REVENUEOS_LLM_BASE_URL` | Any model-backed step | The worker prompt: your `company-context/` canon, recent `learning-loop/CORRECTIONS.md` entries, and the material under analysis — page text, ad-export rows, lead rows, a draft email, text extracted from a document. `REVENUEOS_LLM=off` sends nothing to any model |
+| Your own website, and any URL you point a worker at | `init --from`, `demo`, `seo`, `measure` | An ordinary HTTPS GET |
+| `hn.algolia.com`, `hacker-news.firebaseio.com` | `monitor` | Your search seeds |
+| `api.ahrefs.com` (free domain-rating endpoint) | `seo` | Your domain and your configured competitors' domains |
+| `overpass-api.de` and its mirrors, plus the business sites found | `discover` public-data lead sources | A geographic/category query |
+| `api.github.com`, `pypistats.org` | `growth` | A public repository / package name |
+| Accounts **you** connect: Stripe, Google (Ads, Search Console, Analytics, Calendar), Meta, WordPress, GitHub Pages | Only after `revenueos connect` | API calls to that account, under that provider's own privacy policy |
+| Your SMTP / IMAP host | `execute` of an outreach action; `inbox` | The email you approved; a read of your mailbox. Unset `SMTP_PASSWORD` or set `REVENUEOS_DRY_RUN=1` and sends are written to `data/outputs/` instead |
+| PyPI | Installation only | The usual package download |
+
+**What is stored, and where — all of it on your disk, none of it anywhere else:**
+`company-context/` (the business canon, plain Markdown), `revenueos.yaml` (site,
+competitors, channels, sender identity, SMTP/IMAP *host and user* — passwords are read from
+the environment, never written to the file), `data/revenueos.db` (SQLite: actions, leads and
+their contact details, email drafts and sends, replies, outcomes, metrics, documents),
+`data/exports/` (the CSVs you drop), `data/outputs/`, `data/reports/`, `data/documents/`,
+`logs/`, and `learning-loop/CORRECTIONS.md`. Credentials for connected accounts live in
+`data/connections.json` at mode `0600`, **in plaintext unless you set `REVENUEOS_TOKEN_KEY`**,
+which seals them with Fernet. In hosted mode `accounts.json` (also `0600`) holds an email and
+a PBKDF2-HMAC-SHA256 password hash at 200,000 rounds.
+
+**Documents you drop into `data/inbox/documents/`** are parsed entirely in-process by
+pure-Python libraries (`intake.py`): no upload, no conversion service, no external binary.
+The file itself never leaves the machine. Only the *extracted text* is sent to your model
+provider, and only when a credential is configured. The intake worker never edits
+`company-context/` — it queues a `correction` action for you to approve.
+
+**What you are responsible for as the operator:** you are the data controller. That includes
+the lawful basis for contacting the prospects you import, honouring opt-outs (RevenueOS keeps
+a suppression list and appends a CASL footer, but the obligation is yours), securing the host
+and the workspace directory, setting `REVENUEOS_TOKEN_KEY` if `data/connections.json` matters
+to you, and your model provider's own terms for the content you send it.
+
+**Deleting data** means deleting files: remove the workspace directory, or individual files
+under `data/`. `revenueos disconnect <provider>` erases that provider's stored tokens. Keep
+the `unsubscribes` table — dropping it would let outreach re-contact someone who asked you to
+stop.
+
+**The marketing site** (`website/`, published at
+<https://unempyd.github.io/revenueos/>) is static: no analytics script, no cookies, no
+browser storage, no third-party requests. GitHub Pages serves it and keeps its own logs.
 
 ## Licence
 

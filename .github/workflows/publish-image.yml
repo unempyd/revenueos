@@ -1,0 +1,151 @@
+name: publish-image
+
+# Builds and publishes the RevenueOS container image to ghcr.io/unempyd/revenueos
+# whenever a GitHub Release is published (i.e. a tag is cut and released).
+#
+# Nothing here creates a tag or a release — that's a human decision. This only
+# reacts to one already existing. `workflow_dispatch` exists purely so a
+# maintainer can re-publish an existing released tag (e.g. after a ghcr.io
+# outage) without cutting a new release; it never invents a version.
+#
+# No external registry credentials are needed: GITHUB_TOKEN with the
+# `packages: write` permission below is sufficient for ghcr.io under the
+# repository owner's account.
+#
+# arm64: both base images (python:3.12-slim-bookworm, node:22-bookworm-slim)
+# publish linux/arm64 manifests, so the platform list below includes it.
+# The pre-push verification gate (see "Verify the loadable image") only runs
+# natively on linux/amd64 — this repo's sandbox has no buildx available to
+# exercise an emulated arm64 build/run before wiring this workflow, so the
+# arm64 leg is build-verified by CI (the job fails if it doesn't build) but
+# not run-verified here. If the arm64 leg proves slow or flaky in practice,
+# drop it from `platforms:` in both build steps below and ship amd64 only —
+# do not ship a manifest with a broken arch.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Existing release tag to re-publish (e.g. 0.2.5). Must already exist; this does not create a release."
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-image-${{ github.event.release.tag_name || github.event.inputs.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/unempyd/revenueos
+
+jobs:
+  release-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref && format('refs/tags/{0}', github.event.inputs.ref) || github.ref }}
+
+      - name: Compute tags and OCI labels
+        id: meta
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "release" ]; then
+            RAW_TAG="${{ github.event.release.tag_name }}"
+            PRERELEASE="${{ github.event.release.prerelease }}"
+          else
+            RAW_TAG="${{ github.event.inputs.ref }}"
+            PRERELEASE="false"
+          fi
+          if [ -z "$RAW_TAG" ]; then
+            echo "::error::no release tag / ref resolved" >&2
+            exit 1
+          fi
+          VERSION="${RAW_TAG#v}"
+
+          TAG_LIST=("${IMAGE}:${RAW_TAG}")
+          if [ "$RAW_TAG" != "$VERSION" ]; then
+            TAG_LIST+=("${IMAGE}:${VERSION}")
+          fi
+          if [ "$PRERELEASE" != "true" ]; then
+            TAG_LIST+=("${IMAGE}:latest")
+          fi
+          TAGS=$(printf '%s\n' "${TAG_LIST[@]}")
+
+          {
+            echo "tags<<EOF"
+            echo "$TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "labels<<EOF"
+            echo "org.opencontainers.image.title=RevenueOS"
+            echo "org.opencontainers.image.description=Plug-in autonomous revenue department: connect your business, turn RevenueOS on."
+            echo "org.opencontainers.image.source=https://github.com/${{ github.repository }}"
+            echo "org.opencontainers.image.url=https://github.com/${{ github.repository }}"
+            echo "org.opencontainers.image.licenses=MIT"
+            echo "org.opencontainers.image.version=${VERSION}"
+            echo "org.opencontainers.image.revision=${{ github.sha }}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (for the linux/arm64 leg)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build amd64 only, loaded into the local daemon, so it can actually be
+      # run and checked before anything is pushed anywhere.
+      - name: Build amd64 image for pre-push verification
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: revenueos:verify
+          cache-from: type=gha,scope=revenueos-image
+          cache-to: type=gha,mode=max,scope=revenueos-image
+
+      - name: Verify the loadable image before publishing
+        run: |
+          set -euo pipefail
+          echo "== revenueos --version =="
+          docker run --rm -e REVENUEOS_LLM=off revenueos:verify revenueos --version
+          echo "== revenueos demo https://example.com --no-llm =="
+          docker run --rm -e REVENUEOS_LLM=off revenueos:verify revenueos demo https://example.com --no-llm
+
+      # Only after the verification gate above passes: build the real
+      # multi-arch manifest and push it.
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=revenueos-image
+          cache-to: type=gha,mode=max,scope=revenueos-image
+
+      - name: Summary
+        run: |
+          echo "Published ${IMAGE} version ${{ steps.meta.outputs.version }}:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

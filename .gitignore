@@ -20,6 +20,8 @@ data/*.sqlite*
 data/exports/
 data/outputs/
 data/reports/
+data/documents/
+data/inbox/
 data/content.jsonl
 logs/
 services/openoutreach/data/

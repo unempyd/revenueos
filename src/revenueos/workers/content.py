@@ -155,9 +155,43 @@ class ContentWorker:
                          "skill_input": f"Produce: {title}. Channel: {s['channel']}."},
             )
             created += 1 if aid else 0
+        video_created, video_note = _propose_video(ws, store, ctx, llm, run_id, week)
+        created += video_created
         open_ = len(store.list_actions("pending", "content_opportunity"))
         return WorkerResult(ok=True, summary=f"{created} new content idea(s) for {', '.join(ctx.channels) or 'your channels'}; {open_} open.",
-                            actions_created=created, details={"picked": [f"{p['source']}/{p['slug']}" for p in picks], "week": week})
+                            actions_created=created, details={"picked": [f"{p['source']}/{p['slug']}" for p in picks], "week": week,
+                                                              "video": video_note})
+
+
+def _propose_video(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, run_id: int,
+                   week: str) -> tuple[int, str]:
+    """One advertisement per week, for the first configured channel where a short motion asset is
+    the native format. The model writes the shot list; `creative.write_brief` validates it against
+    the render contract, offers it only the footage and stills that really exist in this workspace,
+    and refuses a malformed one. With `llm=None` no brief exists, so nothing is proposed — this
+    worker never renders anything itself (that is `render_video`, after approval)."""
+    from ..creative import video_channel, write_brief
+
+    picked = video_channel(ctx.channels)
+    if picked is None:
+        return 0, "no configured channel where a video is the native format"
+    channel, aspect = picked
+    brief, note = write_brief(llm, company=ctx.company_name, channel=channel, aspect=aspect,
+                              context_summary=ctx.prompt_summary(), workspace=ws.root)
+    if brief is None:
+        return 0, note
+    aid = store.create_action(
+        "content_opportunity", f"{channel.strip().title()}: {brief.title}",
+        f"What you get: a {brief.seconds:g}-second {aspect} advertisement for {channel}, "
+        f"{len(brief.scenes)} scenes at 30fps"
+        + (f", cutting to {sum(1 for s in brief.scenes if s.media)} shot(s) of your own footage"
+           if any(s.media for s in brief.scenes) else "")
+        + ". You approve it before it is made, and nothing is posted anywhere.",
+        run_id=run_id, dedupe_key=f"video:{week}:{channel.lower().strip()}",
+        context={"executor": "render_video", "channel": channel, "aspect": aspect,
+                 "video_brief": brief.as_dict(), "before": {"video_rendered": 0.0}},
+    )
+    return (1 if aid else 0), note
 
 
 def execute_content(ws: Workspace, store: Store, ctx: BusinessContext, llm: LLM | None, action: dict[str, Any]) -> str:

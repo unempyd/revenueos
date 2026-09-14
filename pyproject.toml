@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "revenueos"
-version = "0.2.5"
+version = "0.2.6"
 description = "Plug-in autonomous revenue department: connect your business, turn RevenueOS on."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -23,6 +23,13 @@ dependencies = [
   "six>=1.16",
   "html5lib>=1.1",
   "cssselect>=1.2",
+  # Document intake (src/revenueos/intake.py). Pure Python, permissive, no external binary:
+  # pypdf BSD-3-Clause · python-docx MIT · openpyxl MIT · python-pptx MIT · striprtf BSD-3-Clause.
+  "pypdf>=5.1",
+  "python-docx>=1.1",
+  "openpyxl>=3.1",
+  "python-pptx>=1.0",
+  "striprtf>=0.0.26",
 ]
 
 [project.optional-dependencies]

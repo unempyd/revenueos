@@ -131,6 +131,21 @@ class Workspace:
         return p
 
     @property
+    def documents_inbox(self) -> Path:
+        """Drop folder: the business puts its own PDFs, Word files, spreadsheets and decks here
+        and the `intake` worker reads them (src/revenueos/intake.py)."""
+        p = self.data / "inbox" / "documents"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    @property
+    def documents(self) -> Path:
+        """Where a read document's extracted text is kept, so skills and workers can use it."""
+        p = self.data / "documents"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    @property
     def automations(self) -> Path:
         return self.data / "automations.json"
 

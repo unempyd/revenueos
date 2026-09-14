@@ -28,7 +28,7 @@ ADS_CSV = """date,account_id,account_name,campaign_id,campaign_name,campaign_sta
 
 def test_worker_roster():
     names = set(all_workers())
-    assert names == {"discover", "outreach", "inbox", "seo", "ads-audit", "content", "monitor", "measure", "growth", "billing", "analytics", "ads-live", "heartbeat"}
+    assert names == {"discover", "outreach", "inbox", "intake", "seo", "ads-audit", "content", "monitor", "measure", "growth", "billing", "analytics", "ads-live", "heartbeat"}
 
 
 def test_discover_from_csv_drop(workspace, store, onboarded):
@@ -183,6 +183,31 @@ def test_monitor_creates_market_signals(workspace, store, onboarded, monkeypatch
     r = run_worker("monitor", workspace, store, onboarded, None)
     assert r.ok and r.actions_created == 0 and r.details["gated"] is False and r.details["candidates"] == 2, r
     assert store.list_actions("pending", "market_signal") == [] and "none judged" in r.summary
+
+
+def test_a_flagged_or_deleted_thread_is_never_put_in_front_of_a_customer():
+    """The search index the discovery tool uses carries no moderation state — it drops what was
+    killed rather than marking it — so a thread can be indexed, surfaced, and dead by the time the
+    customer opens it. Firebase carries it, and a real flagged comment on 2026-09-14 returned
+    `dead: true` with its text replaced by `[flagged]`."""
+    import httpx
+
+    from revenueos.workers.monitor import live_on_hn
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        body = {"1": {"id": 1, "by": "someone", "dead": True, "text": "[flagged]"},
+                "2": {"id": 2, "by": "someone", "deleted": True},
+                "3": {"id": 3, "by": "someone", "title": "a live thread"}}[req.url.path.split("/")[-1].removesuffix(".json")]
+        return httpx.Response(200, json=body)
+
+    c = httpx.Client(transport=httpx.MockTransport(handler))
+    assert live_on_hn("https://news.ycombinator.com/item?id=1", c) == (False, "flagged or killed on Hacker News")
+    assert live_on_hn("https://news.ycombinator.com/item?id=2", c) == (False, "deleted on Hacker News")
+    assert live_on_hn("https://news.ycombinator.com/item?id=3", c) == (True, "")
+    # fails open: a check that cannot run must not silently delete the worker's output
+    broken = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+    assert live_on_hn("https://news.ycombinator.com/item?id=1", broken) == (True, "")
+    assert live_on_hn("https://example.com/not-hn", c) == (True, "")
 
 
 def test_content_matches_channels_to_skills(workspace, store, onboarded):

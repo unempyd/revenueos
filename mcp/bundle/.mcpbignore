@@ -1,0 +1,41 @@
+# Nothing below may ever reach a published .mcpb bundle.
+# `mcpb pack` already drops .git/, .gitignore, *.log and .env.local-style files; this adds
+# the RevenueOS-specific hazards. scripts/build_mcpb.py stages the bundle from a clean
+# directory, so this file is a second line of defence rather than the only one.
+
+# Runtime state uv creates in the extension directory after install
+.venv/
+uv.lock
+__pycache__/
+*.pyc
+
+# Workspace state: customer data, credentials, the SQLite store
+data/
+tenants/
+company-context/
+learning-loop/
+revenueos.yaml
+accounts.json
+*.db
+*.sqlite3
+*.key
+*.pem
+license-secret.txt
+
+# Secrets of every shape (mcpb only excludes .env.local / .env.*.local by default)
+.env
+.env.*
+*_vars
+secrets/
+
+# Bulk trees that have no business in a ~100 KB bundle
+skills/
+agents/
+tools/
+playbooks/
+methodology/
+capabilities/
+upstream/
+node_modules/
+docs/
+research/

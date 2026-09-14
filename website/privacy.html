@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RevenueOS Privacy Policy — what leaves your machine, and what never does</title>
+<meta name="description" content="RevenueOS is self-hosted: the project operates no backend, collects no telemetry and never receives your data. This policy lists every destination the software can reach, every file it writes, and what you are responsible for as the operator.">
+<link rel="canonical" href="https://unempyd.github.io/revenueos/privacy.html">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="design.css">
+<style>
+  /* Page-local layout only. Every colour, radius and font below is an existing
+     design.css token — this page adds no new ones. */
+  .policy{max-width:76ch}
+  .policy h3{margin:32px 0 8px}
+  .policy p,.policy li,.policy dd{color:var(--platinum);font-size:16px;line-height:1.55}
+  .policy b,.policy strong{color:var(--frost);font-weight:600}
+  .policy ul{padding-left:20px;margin:0 0 18px}
+  .policy li{margin-bottom:10px}
+  .policy dl{margin:0 0 18px}
+  .policy dt{color:var(--frost);font-weight:600;font-size:15px;margin-top:18px}
+  .policy dd{margin:4px 0 0;font-size:15px}
+  /* .table-wrap gives the panel treatment; its own rules centre body cells, so these
+     selectors are scoped through it to win on specificity — a policy table reads left. */
+  /* design.css pins tables to min-width:0; a three-column policy table squeezed to a
+     phone is unreadable, so it keeps its width and .table-wrap scrolls instead. */
+  .table-wrap .egress{width:100%;min-width:820px;border-collapse:collapse;font-size:15px}
+  .table-wrap .egress th,.table-wrap .egress td{padding:14px 16px;border-bottom:1px solid var(--smoke);text-align:left;vertical-align:top}
+  .table-wrap .egress thead th{color:var(--frost);font-weight:600}
+  .table-wrap .egress td{color:var(--platinum)}
+  .table-wrap .egress td:first-child{color:var(--frost);width:30%}
+  .table-wrap .egress td:nth-child(2){width:22%}
+  .never{border-left:2px solid var(--green);padding:2px 0 2px 18px;margin:20px 0}
+  .never li{margin-bottom:8px}
+  .stamp{color:var(--silver);font-size:13px}
+  /* the shared footer layout the other pages carry in their own page styles */
+  footer{border-top:1px solid var(--smoke);padding-block:38px}
+  .foot-row{display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;align-items:flex-start;font-size:13.5px;color:var(--platinum)}
+  .foot-links{display:flex;gap:18px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="wrap row">
+    <div class="brand"><span class="dot"></span>RevenueOS</div>
+    <nav class="links"><a href="index.html#loop">How it works</a><a href="pricing.html">Pricing</a><a href="proof.html">Proof</a><a href="compare.html">Compare</a></nav>
+    <button class="navbtn" aria-expanded="false" aria-label="Open menu"><span></span><span></span><span></span></button>
+    <a class="cta-btn small nav-cta" href="index.html#install">Install free</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <div class="eyebrow">Privacy policy</div>
+    <h1>We never receive your data, because there is nowhere for it to go.</h1>
+    <p class="lede">RevenueOS is software you run, not a service you send things to. This page lists every
+      destination the product can reach, every file it writes, and what stays your responsibility.</p>
+  </section>
+
+  <section class="tight">
+    <div class="policy">
+      <h2>Who is responsible for what</h2>
+      <p>RevenueOS is open-source software (MIT) that you install and run on your own machine or your own
+        server. <b>The RevenueOS project operates no backend for it.</b> There is no account to create, no
+        server your install reports to, and no path by which the project could read your workspace. You are
+        the data controller for everything RevenueOS touches; the project is not a processor of it, because
+        it never holds it.</p>
+      <p>Licensing is not an exception. A RevenueOS licence is an HMAC-signed key checked locally by the
+        software itself — installing or verifying one contacts no licence server.</p>
+
+      <h3>What is never collected</h3>
+      <div class="never">
+        <ul>
+          <li><b>No telemetry.</b> No usage counters, no feature pings, no heartbeat.</li>
+          <li><b>No crash or error reporting.</b> Tracebacks stay in your <code>logs/</code> directory.</li>
+          <li><b>No analytics SDK</b> anywhere in the product or on this website.</li>
+          <li><b>No phone-home.</b> Not at install, not at first run, not on licence check, not ever.</li>
+        </ul>
+      </div>
+      <p>That is a claim about code, so it was checked as one: every literal HTTP(S) host and every network
+        primitive in the shipped tree — <code>httpx</code>, <code>urllib</code>, <code>socket</code>,
+        <code>smtplib</code>, <code>imaplib</code> and every <code>subprocess</code> call, vendored code
+        included — was enumerated and accounted for. The complete result is the next section. No
+        RevenueOS-operated host appears in it, because none exists.</p>
+    </div>
+  </section>
+
+  <section class="tight">
+    <div class="policy">
+      <h2>What leaves your machine</h2>
+      <p>Every row below happens only because you configured it, and most of the product works with none of
+        them switched on. With <code>REVENUEOS_LLM=off</code> and nothing connected, a RevenueOS run reaches
+        exactly one host: your own website.</p>
+    </div>
+    <div class="table-wrap" style="overflow-x:auto">
+      <table class="egress">
+        <thead><tr><th>Destination</th><th>When it is contacted</th><th>What is sent</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Your model provider — Anthropic's API with your <code>ANTHROPIC_API_KEY</code>, the Claude
+              Code CLI you are already signed into, or any OpenAI-compatible endpoint you point
+              <code>REVENUEOS_LLM_BASE_URL</code> at</td>
+            <td>Any model-backed step</td>
+            <td>The worker prompt: your business canon from <code>company-context/</code>, recent entries
+              from <code>learning-loop/CORRECTIONS.md</code>, and the material being analysed — page text,
+              ad-export rows, lead rows, a draft email, or text extracted from a document you dropped in.
+              <b><code>REVENUEOS_LLM=off</code> sends nothing to any model.</b></td>
+          </tr>
+          <tr>
+            <td>Your own website, and any URL you hand a worker</td>
+            <td><code>init --from</code>, <code>demo</code>, <code>seo</code>, <code>measure</code></td>
+            <td>An ordinary HTTPS GET. Nothing about you is sent beyond a User-Agent.</td>
+          </tr>
+          <tr>
+            <td>Hacker News — the Algolia search API and the public item API</td>
+            <td>The <code>monitor</code> worker</td>
+            <td>The search seeds from your own product brain.</td>
+          </tr>
+          <tr>
+            <td>Ahrefs' free domain-rating endpoint</td>
+            <td>The <code>seo</code> worker</td>
+            <td>Your domain and the competitor domains you listed.</td>
+          </tr>
+          <tr>
+            <td>OpenStreetMap Overpass mirrors, and the business websites found through them</td>
+            <td>Public-data lead discovery in <code>discover</code></td>
+            <td>A geographic and category query. No list of yours is uploaded.</td>
+          </tr>
+          <tr>
+            <td>The GitHub API and PyPI's download-stats API</td>
+            <td>The <code>growth</code> worker, if you use it</td>
+            <td>A public repository or package name.</td>
+          </tr>
+          <tr>
+            <td>Accounts <b>you</b> connect: Stripe, Google (Ads, Search Console, Analytics, Calendar),
+              Meta, WordPress, GitHub Pages</td>
+            <td>Only after you run <code>revenueos connect</code> and authorise them</td>
+            <td>API calls to your own account, under that provider's own privacy policy. Connections are
+              read-only until you separately pass <code>--allow-changes</code>.</td>
+          </tr>
+          <tr>
+            <td>Your SMTP host, and your IMAP host</td>
+            <td>Executing an approved outreach action; the <code>inbox</code> worker</td>
+            <td>The email you approved, and a read of your own mailbox. Leave <code>SMTP_PASSWORD</code>
+              unset or set <code>REVENUEOS_DRY_RUN=1</code> and approved mail is written to
+              <code>data/outputs/</code> instead of sent.</td>
+          </tr>
+          <tr>
+            <td>PyPI</td>
+            <td>Installation only, including the first run of the Claude Desktop extension</td>
+            <td>The usual package download.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="tight">
+    <div class="policy">
+      <h2>What is stored, and where</h2>
+      <p>All of it is plain files inside the workspace directory you chose. Nothing is stored anywhere else.</p>
+      <dl>
+        <dt>company-context/</dt>
+        <dd>Your business canon as twelve Markdown files: offer, customers, differentiators, pain points,
+          voice. Written at onboarding and edited by you.</dd>
+        <dt>revenueos.yaml</dt>
+        <dd>Website, competitors, channels, sender identity, and the SMTP/IMAP <em>host and username</em>.
+          Passwords are read from the environment and are never written into this file.</dd>
+        <dt>data/revenueos.db</dt>
+        <dd>SQLite. Actions and their evidence, leads with their contact details, email drafts and sends,
+          replies and bounces, measured outcomes, metrics, and a record of documents read.</dd>
+        <dt>data/connections.json</dt>
+        <dd>OAuth tokens and API keys for the accounts you connected, at file mode <code>0600</code>.
+          <b>Plaintext JSON unless you set <code>REVENUEOS_TOKEN_KEY</code></b>, which seals the secrets
+          with Fernet. If those credentials matter to you, set that variable.</dd>
+        <dt>data/exports/, data/outputs/, data/reports/, data/documents/, logs/</dt>
+        <dd>The CSVs you drop in, deliverables and dry-run emails, generated reports, extracted document
+          text, and run logs.</dd>
+        <dt>learning-loop/CORRECTIONS.md</dt>
+        <dd>Your corrections, never deleted, injected into worker prompts for thirty days.</dd>
+        <dt>accounts.json (hosted mode only)</dt>
+        <dd>One record per account: email address and a PBKDF2-HMAC-SHA256 password hash at 200,000
+          rounds, at file mode <code>0600</code>. Passwords themselves are never stored.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section class="tight">
+    <div class="policy">
+      <h2>Documents you give it</h2>
+      <p>Files dropped into <code>data/inbox/documents/</code> — a price list, a brand guide, a business
+        plan, a competitor report — are parsed <b>entirely in-process</b> by pure-Python libraries. There is
+        no upload, no conversion service, and no shelling out to an external binary. The document itself
+        never leaves the machine.</p>
+      <p>Only the <em>extracted text</em> is sent onward, only to the model provider you configured, and
+        only if a credential is present — the same path as any other worker prompt. The intake worker never
+        edits your canon on its own: it queues a correction for you to approve.</p>
+
+      <h2>Outreach, and the people in your lists</h2>
+      <p>If you use RevenueOS to send email, the prospects in your lists are your data subjects and you are
+        their controller. RevenueOS helps — it appends a CASL-compliant footer, keeps a suppression list,
+        enforces a daily cap, and refuses to draft to anyone it has not qualified — but the lawful basis for
+        contacting them, and honouring every opt-out, is yours. No worker sends anything: only an action you
+        approved and then executed does.</p>
+    </div>
+  </section>
+
+  <section class="tight">
+    <div class="policy">
+      <h2>Deleting things</h2>
+      <p>Deletion is file deletion, because that is all there is. Remove the workspace directory and
+        everything is gone. Remove individual files under <code>data/</code> to drop just that.
+        <code>revenueos disconnect &lt;provider&gt;</code> erases that provider's stored tokens. One
+        exception worth keeping: leave the <code>unsubscribes</code> table alone — dropping it would let
+        outreach contact someone who already asked you to stop.</p>
+
+      <h2>This website</h2>
+      <p>The pages you are reading are static files served by GitHub Pages. They carry no analytics script,
+        set no cookies, use no browser storage and make no third-party requests. GitHub keeps its own server
+        logs for the domain, under GitHub's privacy policy; we neither see nor receive them.</p>
+
+      <h2>Changes, and how to reach us</h2>
+      <p>If this policy changes, the change lands in the public repository with the commit that made it, and
+        this page is rebuilt from that commit. Questions, corrections, or a claim on this page you think is
+        wrong: <a href="https://github.com/unempyd/revenueos/issues">open an issue</a> — that is the only
+        channel, and it is public by design.</p>
+
+      <p class="stamp">Last updated 14 September 2026, verified against the source tree on the same date.
+        RevenueOS is MIT-licensed; see
+        <a href="https://github.com/unempyd/revenueos/blob/main/NOTICE.md">NOTICE.md</a> for the vendored
+        components and
+        <a href="https://github.com/unempyd/revenueos/blob/main/docs/security-and-approval.md">security &amp; approval</a>
+        for how the approval gate works.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer><div class="wrap foot-row"><div>© 2026 RevenueOS. Open-source core (MIT). Nothing sends, publishes or spends without your approval.</div>
+<div class="foot-links"><a href="index.html">Home</a><a href="pricing.html">Pricing</a><a href="proof.html">Proof</a><a href="privacy.html">Privacy</a><a href="https://github.com/unempyd/revenueos">GitHub</a></div></div></footer>
+<script src="site.js" defer></script>
+</body>
+</html>

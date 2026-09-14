@@ -266,6 +266,15 @@ def measure_publish(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[st
 def measure_content(ws: Workspace, action: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     outputs = sorted(ws.outputs.glob(f"*-{action['id']}.md"))
     if not outputs:
+        # a rendered video is a deliverable like any other: 'produced (not published)'. There is no
+        # view count, no engagement number and no reach here, and none is invented.
+        video = (action.get("context") or {}).get("video")
+        if video and (ws.root / video).is_file():
+            c = action["context"]
+            after = {"path": video, "bytes": (ws.root / video).stat().st_size, "seconds": c.get("video_seconds"),
+                     "dimensions": f"{c.get('video_width')}x{c.get('video_height')}", "codec": c.get("video_codec")}
+            return "produced", {"metric": "deliverable_produced", "before_value": 0.0, "after_value": 1.0,
+                                "after": after, "note": PRODUCED_NOTE}
         return "pending", {"note": "no deliverable in data/outputs yet"}
     path = outputs[-1]
     after = {"path": str(path.relative_to(ws.root)), "chars": path.stat().st_size}
