@@ -267,7 +267,14 @@ def dash_in(text: str) -> str | None:
     return None
 
 
-def send_smtp(cfg: dict[str, Any], to_email: str, subject: str, text: str) -> str:
+def send_smtp(cfg: dict[str, Any], to_email: str, subject: str, text: str,
+              html: str | None = None) -> str:
+    """Send one message. With `html` it goes as multipart/alternative, text part first.
+
+    The guard runs on the subject and the text part only. The HTML part is full of CSS, and
+    `-apple-system` and `letter-spacing:-.28px` are not dashes in prose. Since the text part
+    carries the same sentences as the HTML, checking it checks the copy.
+    """
     found = dash_in(subject) or dash_in(text)
     if found:
         raise RuntimeError(
@@ -293,6 +300,10 @@ def send_smtp(cfg: dict[str, Any], to_email: str, subject: str, text: str) -> st
     if ((cfg.get("outreach") or {}).get("list_unsubscribe")):
         msg["List-Unsubscribe"] = f"<mailto:{sender}?subject=stop>"
     msg.set_content(text)
+    if html:
+        # Text first, HTML second. A message whose text part is a stub telling the reader to open
+        # it in a browser is the shape of one with something to hide, and filters score it that way.
+        msg.add_alternative(html, subtype="html")
     with smtplib.SMTP(host, port, timeout=30) as s:
         s.starttls()
         s.login(user, password)
@@ -312,12 +323,20 @@ def execute_plain_send(ws: Workspace, store: Store, ctx: BusinessContext, action
         return f"not sent: {to_email} is on the suppression list"
     subject = c.get("subject") or action["title"]
     text = action.get("content") or ""
+    html = c.get("html") or None
     dry = os.environ.get("REVENUEOS_DRY_RUN") == "1" or (ctx.config.get("outreach") or {}).get("dry_run", False)
     if dry:
         path = ws.outputs / f"email-action-{action['id']}.txt"
         path.write_text(f"To: {to_email}\nSubject: {subject}\n\n{text}", encoding="utf-8")
-        return f"written to {path} (dry run) — nothing was sent"
-    send_smtp(ctx.config, to_email, subject, text)
+        wrote = str(path)
+        if html:
+            # The HTML is what the recipient actually sees, so a dry run that writes only the
+            # text part cannot be reviewed. Write both, and name both.
+            page = ws.outputs / f"email-action-{action['id']}.html"
+            page.write_text(html, encoding="utf-8")
+            wrote += f" and {page}"
+        return f"written to {wrote} (dry run) — nothing was sent"
+    send_smtp(ctx.config, to_email, subject, text, html=html)
     return f"sent via smtp to {to_email}"
 
 

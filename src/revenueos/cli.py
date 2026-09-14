@@ -338,6 +338,37 @@ def cmd_tools(args: argparse.Namespace) -> int:
     return 0
 
 
+def _smtp_health(ctx: BusinessContext) -> tuple[str, bool]:
+    """Answer whether mail can actually be sent, not whether two settings are populated.
+
+    Configuration being present says nothing: a host from one provider with another provider's
+    password looks complete and is rejected at the door. This opens the connection and logs in.
+    A few seconds in `doctor` is worth it, because the alternative was reporting healthy while
+    every send failed.
+    """
+    cfg = (ctx.config.get("smtp") or {})
+    host, port = cfg.get("host"), int(cfg.get("port") or 587)
+    user = cfg.get("user") or (ctx.config.get("sender") or {}).get("email")
+    password = os.environ.get("SMTP_PASSWORD")
+    if not host:
+        return "no smtp.host in revenueos.yaml", False
+    if not password:
+        return f"{host}: SMTP_PASSWORD is not set", False
+    if not user:
+        return f"{host}: no smtp.user or sender.email", False
+    try:
+        import smtplib
+
+        with smtplib.SMTP(host, port, timeout=20) as srv:
+            srv.starttls()
+            srv.login(user, password)
+    except smtplib.SMTPAuthenticationError:
+        return f"{host} rejected {user}: wrong password, or an app password is needed", False
+    except Exception as exc:  # noqa: BLE001 - any failure to reach the server is the same answer
+        return f"{host} unreachable: {type(exc).__name__}", False
+    return f"{host} accepts {user}", True
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     ws, store, ctx = _boot(args)
     reg = load_registry(ws)
@@ -351,7 +382,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         ("orchestrator deps", "orchestrator/node_modules", (ws.root / "orchestrator" / "node_modules").exists()),
         ("automations", str(ws.automations.relative_to(ws.root)), ws.automations.exists()),
         ("openoutreach (GPL, process boundary)", shutil.which("openoutreach") or "not installed", bool(shutil.which("openoutreach"))),
-        ("SMTP", "smtp.host in revenueos.yaml + SMTP_PASSWORD", bool((ctx.config.get("smtp") or {}).get("host") and os.environ.get("SMTP_PASSWORD"))),
+        ("SMTP", *_smtp_health(ctx)),
         ("ad exports", f"{len(list(ws.exports.glob('ads-*.csv')))} file(s) in data/exports/", True),
         ("pending actions", str(sum(store.counts_by_type('pending').values())), True),
     ]
