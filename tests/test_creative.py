@@ -206,8 +206,16 @@ def test_a_missing_ffmpeg_is_a_sentence_not_a_crash(tmp_path: Path, monkeypatch:
 
 
 def test_a_missing_browser_is_a_sentence_not_a_crash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Isolating the browser check needs ffmpeg present, because ffmpeg is checked first.
+
+    On a machine with neither (a CI runner), ffmpeg answers first and this test was asserting the
+    wrong sentence. Skip rather than assert on whichever tool happens to be missing: the point is
+    that a missing browser is a sentence, and that can only be observed when ffmpeg is not also
+    missing."""
     from revenueos import creative
 
+    if not ffmpeg_path():
+        pytest.skip("ffmpeg is absent here, so its error answers before the browser is ever checked")
     monkeypatch.setattr(creative, "find_browser", lambda workspace=None: None)
     result = creative.render_video(TWO_SCENES, tmp_path / "out")
     assert result.ok is False
